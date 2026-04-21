@@ -1,0 +1,27 @@
+_min_copier_version: "9.3"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+_skip_if_exists:
+  - .env
+  - .copier-answers.yml
+  - frontend/public/logo.svg
+  - frontend/src/styles/tokens.css
+
+prospect_name:
+  type: str
+  help: Human-readable name (e.g. "Acme Corp"). Used as the app title and in .adalab config.
+
+prospect_slug:
+  type: str
+  when: false
+  default: "{{ prospect_name | lower | replace(' ', '-') | replace('.', '') | replace(',', '') }}"
+
+app_description:
+  type: str
+  help: One-sentence description of the app
+  default: "Internal app built on the Adamatics platform"
+
+_tasks:
+  - "chmod +x .claude/hooks/protect_paths.py"
+  - "git init -b main"
