@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 32" width="180" height="32">
+  <rect x="0" y="0" width="32" height="32" rx="6" fill="#0B3D91"/>
+  <circle cx="16" cy="16" r="7" fill="#F5A623"/>
+  <text x="42" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="700" fill="#111827">adamatics</text>
+</svg>

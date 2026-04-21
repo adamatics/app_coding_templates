@@ -1,0 +1,8 @@
+# Authoring-time artifacts from running tools against template/ sources.
+# These must never be checked in; they would be copied into every stamped
+# prospect repo as part of the Copier template payload.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.DS_Store

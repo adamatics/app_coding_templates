@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.mypy_cache/
+
+# App data and secrets
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+
+# Copier
+.copier-answers.yml
+
+# Editors and OS
+.DS_Store
+.idea/
+*.swp
