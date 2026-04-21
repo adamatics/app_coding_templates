@@ -7,6 +7,7 @@
 Exit 2 blocks the tool call and feeds stderr back to Claude as guidance.
 Exit 0 allows it. Exit 1 does NOT block (common footgun); avoid.
 """
+
 import json
 import os
 import re
@@ -55,13 +56,17 @@ DANGEROUS_BASH = [
 def block(reason: str) -> None:
     print(f"BLOCKED by .claude/hooks/protect_paths.py: {reason}", file=sys.stderr)
     # Also emit JSON that blocks in bypassPermissions mode.
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    }))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+    )
     sys.exit(2)
 
 
@@ -92,7 +97,10 @@ def main() -> None:
     if tool == "Read":
         path = inp.get("file_path") or ""
         if re.search(r"(^|/)\.env(\.|$)", path) or path.endswith((".pem", ".key", "id_rsa")):
-            block("Secret files are not readable. Reference .env.example if you need environment variable names.")
+            block(
+                "Secret files are not readable. "
+                "Reference .env.example if you need environment variable names."
+            )
 
     if tool == "Bash":
         cmd = inp.get("command", "")
