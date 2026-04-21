@@ -1,0 +1,49 @@
+# fastapi-react-adalab
+
+@AGENTS.md
+
+## Stack
+FastAPI + SQLModel + SQLite + TanStack Router. Deployed on AdaLab.
+
+## Commands
+- Dev backend: `uv run uvicorn main:app --reload`
+- Dev frontend: `cd frontend && pnpm run dev`
+- Tests: `uv run pytest -q && cd frontend && pnpm run test`
+- Lint: `uv run ruff check && cd frontend && pnpm run lint`
+- Local container build: `docker compose -f compose.local.yml up --build`
+
+## You MAY edit
+- `app/api/routes/**` (except `main.py` and `deps.py`)
+- `app/models/**` (except `base.py`; add new models, import them in `__init__.py`)
+- `app/services/**`
+- `app/schemas/**`
+- `frontend/src/routes/**`
+- `frontend/src/components/**`
+- `frontend/src/api/*.ts` (except `client.ts`)
+- `frontend/src/types/**`
+- `tests/**`
+
+## You MUST NOT edit (blocked by .claude/hooks/protect_paths.py)
+- `app/core/**`, `app/api/main.py`, `app/api/deps.py`, `app/models/base.py`, `main.py`
+- `frontend/src/lib/basepath.ts`, `frontend/src/styles/tokens.css`, `frontend/src/api/client.ts`, `frontend/src/main.tsx`, `frontend/vite.config.ts`
+- `.adalab/**`, `.vscode/**`, `Containerfile`, `requirements.txt`, `pyproject.toml`, `uv.lock`
+- `frontend/package.json`, `frontend/pnpm-lock.yaml`
+- `.env*` (read or write), `.claude/hooks/**`, `.claude/settings.json`
+
+If you believe a protected file must change, stop and explain why. Do not attempt workarounds.
+
+## Extending
+Read `.claude/rules/feature-pattern.md` before adding a route. Read `.claude/rules/react-components.md` before adding a page. Read `TEMPLATE_TODO.md` for what's currently incomplete.
+
+## Deployment
+This app deploys to AdaLab via Test → Build → Deploy in the AdaLab VS Code extension. Do not invoke AdaLab commands yourself; the human drives the deploy.
+
+## Database
+SQLite at `./data/app.db`. Schema changes via `SQLModel.metadata.create_all()` on startup. Do not add Alembic.
+
+## Workflow
+1. Read the feature request and any relevant `.claude/rules/` files.
+2. Propose a plan before editing multi-file work.
+3. Implement, then run `/check`.
+4. Invoke the `security-reviewer` agent before declaring done.
+5. Do not commit. The human will review and commit.

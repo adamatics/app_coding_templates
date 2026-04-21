@@ -1,0 +1,39 @@
+# Agents
+
+This file is imported from `CLAUDE.md` and describes the agent and command surface for this template.
+
+## Subagents
+
+Two live under `.claude/agents/`. Invoke them by name.
+
+- **business-logic-implementer** — implements new routes, models, services, schemas, and React pages. Tool set includes Edit/Write; `permissionMode: default` so the PreToolUse hook still fires on every call. Never edits infrastructure files. Always runs `/check` before declaring done. Does not commit.
+
+- **security-reviewer** — read-only auditor. Tools: Read, Grep, Glob, Bash. `permissionMode: plan`. Model: opus. Produces severity-tagged findings across AuthN/AuthZ, input validation, SQL injection, secret leakage, exception handling, CORS/CSRF, and styling rule violations. Only flags issues it is >80% confident are real.
+
+Subagents cannot spawn other subagents. Never set `permissionMode: bypassPermissions` in any subagent.
+
+## Slash commands
+
+Live under `.claude/commands/`.
+
+- **`/check`** — runs `uv run pytest -q`, `uv run ruff check`, `cd frontend && pnpm run test`, `cd frontend && pnpm run lint` in order. Reports failures without fixing unless explicitly asked.
+
+- **`/complete-projects`** — implements the scaffolded Projects feature by mirroring the Departments (or Employees) files. Stops after running `/check`; does not commit.
+
+## Rules
+
+Three path-scoped rule files live under `.claude/rules/` and load automatically when you touch matching paths:
+
+- `feature-pattern.md` — the six-file backend pattern (model → schema → service → route → service tests → API tests).
+- `react-components.md` — the frontend conventions, including the no-hex-literals rule that keeps per-demo re-branding working.
+- `python-style.md` — Python 3.11 idioms, SQLModel-only models, service-return-or-raise contract.
+
+## Guardrails
+
+Three layers, from softest to hardest:
+
+1. This file and `CLAUDE.md` — intent.
+2. `.claude/settings.json` `permissions.deny` — fast denial patterns.
+3. `.claude/hooks/protect_paths.py` — a PreToolUse hook that uses `sys.exit(2)` and a JSON `permissionDecision: deny` to block, including in bypassPermissions mode. Covers Edit/Write targets and a Bash denylist that closes the shell-read hole (e.g. `cat .env`, `cat app/core/...`).
+
+If the hook blocks something you need, ask the human to edit the file directly. Do not invent workarounds.
