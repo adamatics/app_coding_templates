@@ -1,0 +1,83 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/id_rsa*)",
+      "Edit(./app/core/**)",
+      "Edit(./app/api/main.py)",
+      "Edit(./app/api/deps.py)",
+      "Edit(./app/models/base.py)",
+      "Edit(./main.py)",
+      "Edit(./frontend/src/lib/basepath.ts)",
+      "Edit(./frontend/src/styles/tokens.css)",
+      "Edit(./frontend/src/api/client.ts)",
+      "Edit(./frontend/src/main.tsx)",
+      "Edit(./frontend/vite.config.ts)",
+      "Edit(./frontend/package.json)",
+      "Edit(./frontend/pnpm-lock.yaml)",
+      "Edit(./.adalab/**)",
+      "Edit(./.vscode/**)",
+      "Edit(./Containerfile)",
+      "Edit(./requirements.txt)",
+      "Edit(./pyproject.toml)",
+      "Edit(./uv.lock)",
+      "Edit(./.claude/hooks/**)",
+      "Edit(./.claude/settings.json)",
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)",
+      "Bash(uv add:*)",
+      "Bash(pip install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(npm install:*)"
+    ],
+    "ask": [
+      "Bash(git commit:*)"
+    ],
+    "allow": [
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run uvicorn main:app:*)",
+      "Bash(pnpm run dev:*)",
+      "Bash(pnpm run test:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(pnpm run lint:*)",
+      "Bash(pnpm install --frozen-lockfile)",
+      "WebFetch(domain:fastapi.tiangolo.com)",
+      "WebFetch(domain:docs.pydantic.dev)",
+      "WebFetch(domain:tanstack.com)",
+      "WebFetch(domain:sqlmodel.tiangolo.com)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Read|Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "uv run \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect_paths.py"
+        }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{
+          "type": "command",
+          "command": "uv run ruff format \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>/dev/null; uv run ruff check --fix \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>/dev/null; cd \"$CLAUDE_PROJECT_DIR/frontend\" && pnpm exec prettier --write \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>/dev/null; true"
+        }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [{
+          "type": "command",
+          "command": "echo '[AdaLab demo template] Guardrails active. Protected zones enforced by .claude/hooks/protect_paths.py. See CLAUDE.md for editable/protected zones.'"
+        }]
+      }
+    ]
+  }
+}
