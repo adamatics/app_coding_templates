@@ -1,0 +1,30 @@
+:root {
+  /* Edit these three lines per-demo to re-brand. */
+  --color-primary: #0B3D91;
+  --color-secondary: #111827;
+  --color-accent: #F5A623;
+
+  /* Structural tokens: do not edit per-demo. */
+  --color-bg: #ffffff;
+  --color-text: #0a0a0a;
+  --color-border: #e5e7eb;
+  --color-muted: #6b7280;
+  --color-danger: #b91c1c;
+  --color-on-primary: #ffffff;
+  --color-overlay: rgba(0, 0, 0, 0.45);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+}
