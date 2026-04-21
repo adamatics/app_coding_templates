@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.main import include_all_routers
 from app.core.db import init_db
@@ -19,3 +23,15 @@ include_all_routers(app, prefix="/api")
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+STATIC = Path(__file__).parent / "static"
+if STATIC.exists():
+    app.mount("/assets", StaticFiles(directory=STATIC / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def spa(full_path: str) -> FileResponse:
+        candidate = STATIC / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(STATIC / "index.html")
