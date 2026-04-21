@@ -1,0 +1,40 @@
+# {{ prospect_name }}
+
+{{ app_description }}
+
+FastAPI + SQLModel + SQLite backend, React + TanStack Router/Query frontend, served as a single container on port 8000. Deployed on AdaLab.
+
+## Commands
+
+- Backend dev: `uv run uvicorn main:app --reload`
+- Frontend dev: `cd frontend && pnpm install && pnpm run dev`
+- Tests: `uv run pytest -q && cd frontend && pnpm run test`
+- Lint: `uv run ruff check && cd frontend && pnpm run lint`
+- Local container: `docker compose -f compose.local.yml up --build`
+
+The container listens on port 8000 and serves both `/api/*` and the built frontend.
+
+## Authentication
+
+All `/api/*` endpoints require `Authorization: Bearer demo-token`. This is a dummy fixed token for demo purposes; never ship it unchanged to a real deployment.
+
+## Per-demo branding
+
+Two files, edited directly in this repo, carry all prospect-specific branding:
+
+1. `frontend/public/logo.svg` — replace with the prospect's logo.
+2. `frontend/src/styles/tokens.css` — edit the three `--color-primary`, `--color-secondary`, `--color-accent` values at the top.
+
+Everything else uses `var(--color-*)` tokens, so the reskin propagates. Rebuild via AdaLab Test → Build → Deploy.
+
+## Deployment
+
+1. Open this repo in VS Code with the AdaLab extension.
+2. Run Test → Build → Deploy in the AdaLab panel.
+3. The deployed URL renders this app with prospect branding.
+
+## Extending during a demo
+
+- Claude Code guardrails are active. See `CLAUDE.md` and `AGENTS.md`.
+- The Projects feature is intentionally incomplete. Run `/complete-projects` in Claude Code to implement it mirroring Departments/Employees. See `TEMPLATE_TODO.md`.
+- Do not add Alembic. Schema changes apply via `SQLModel.metadata.create_all()` at startup.

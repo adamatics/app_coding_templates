@@ -8,7 +8,7 @@ from app.api.main import include_all_routers
 from app.core.db import init_db
 from app.seed import seed_if_empty
 
-app = FastAPI(title="fastapi-react-adalab")
+app = FastAPI(title="{{ prospect_name }}")
 
 
 @app.on_event("startup")

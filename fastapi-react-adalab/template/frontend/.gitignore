@@ -2,3 +2,6 @@ node_modules/
 dist/
 .eslintcache
 src/routeTree.gen.ts
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js

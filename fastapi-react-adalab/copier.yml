@@ -8,6 +8,27 @@ _skip_if_exists:
   - frontend/public/logo.svg
   - frontend/src/styles/tokens.css
 
+_exclude:
+  - "copier.yml"
+  - "~*"
+  - "*.pyc"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - ".venv"
+  - "node_modules"
+  - "dist"
+  - ".pytest_cache"
+  - ".ruff_cache"
+  - ".eslintcache"
+  - "*.tsbuildinfo"
+  - "data"
+  - "*.db"
+  - "*.db-journal"
+  - "routeTree.gen.ts"
+  - "vite.config.d.ts"
+  - "vite.config.js"
+
 prospect_name:
   type: str
   help: Human-readable name (e.g. "Acme Corp"). Used as the app title and in .adalab config.
