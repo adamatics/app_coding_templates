@@ -1,0 +1,77 @@
+# Developer Guide — {{ prospect_name }}
+
+If you've just received this repo and are about to build on top of it, start here.
+
+## What you just got
+
+A working AdaLab app with:
+
+- FastAPI + SQLModel + SQLite backend behind a dummy Bearer-token auth
+- React + TanStack Router + TanStack Query + React Hook Form + Zod frontend
+- A `Department` + `Employee` reference feature, fully implemented end-to-end
+- A `Project` feature, scaffolded but incomplete (so you can practise extending)
+- A `/api/reports/*` slice with CSV upload analysis and CSV/Excel export to illustrate file IO
+- Three-layer Claude Code guardrails (`CLAUDE.md`, `.claude/settings.json`, `.claude/hooks/protect_paths.py`)
+- Branded defaults. Replace two files to rebrand per demo: `frontend/public/logo.svg` and the three `--color-*` values at the top of `frontend/src/styles/tokens.css`.
+
+## First run
+
+```bash
+# Backend dev server
+uv sync
+uv run uvicorn main:app --reload
+
+# In another terminal: frontend dev server (proxies /api to localhost:8000)
+cd frontend
+pnpm install
+pnpm run dev
+```
+
+Or run the built container:
+
+```bash
+docker compose -f compose.local.yml up --build
+```
+
+Open the app and you should see a **"Welcome, developer"** screen. That screen is your confirmation that the scaffolding works end-to-end.
+
+## Your first loop with Claude Code
+
+1. Open this repo in Claude Code.
+2. Skim `CLAUDE.md` (guardrails and workflow), `AGENTS.md` (subagents and slash commands), and `.claude/rules/` (feature patterns).
+3. Edit `FEATURES_TODO.md` — sketch the features you want to build.
+4. Ask Claude: _"Read `FEATURES_TODO.md`, ask clarifying questions, then propose an implementation order."_
+5. Let Claude work through the list. Run `/check` between features. Use the `security-reviewer` subagent on anything that touches auth.
+6. The first item should be: **remove the welcome screen** — replace `frontend/src/routes/index.tsx` with your real home page.
+
+## Editable vs protected zones
+
+See `CLAUDE.md` for the canonical list. Short version:
+
+- **Edit freely:** `app/api/routes/**` (except `main.py` and `deps.py`), `app/models/**` (except `base.py`), `app/services/**`, `app/schemas/**`, `frontend/src/routes/**`, `frontend/src/components/**`, `frontend/src/api/*.ts` (except `client.ts`), `frontend/src/types/**`, `tests/**`.
+- **Blocked by the hook:** `app/core/**`, `main.py`, `app/api/main.py`, `app/api/deps.py`, `app/models/base.py`, `frontend/src/lib/basepath.ts`, `frontend/src/styles/tokens.css`, `frontend/src/api/client.ts`, `frontend/src/main.tsx`, `frontend/vite.config.ts`, `frontend/package.json`, `frontend/pnpm-lock.yaml`, `.adalab/**`, `.vscode/**`, `Containerfile`, `requirements.txt`, `pyproject.toml`, `uv.lock`, `.env*`, `.claude/hooks/**`, `.claude/settings.json`.
+
+If a protected file genuinely must change, ask a human to edit it directly.
+
+## Rebranding for a prospect
+
+1. Replace `frontend/public/logo.svg` with the prospect's logo (SVG or a static asset you swap in).
+2. Edit the three `--color-primary`, `--color-secondary`, `--color-accent` values at the top of `frontend/src/styles/tokens.css`.
+3. Rebuild via AdaLab Test → Build → Deploy (or locally: `docker compose -f compose.local.yml up --build`).
+4. To revert: `git checkout frontend/public/logo.svg frontend/src/styles/tokens.css`.
+
+The `_skip_if_exists` rules in `copier.yml` mean `copier update` will never overwrite these two files, so a template pull won't clobber your per-demo branding.
+
+## Key endpoints
+
+- `GET /api/health` — unauth, for liveness
+- `GET /api/departments`, `/api/employees` — authed list (Bearer `demo-token`)
+- `POST /api/reports/analyze-csv` — multipart upload, returns shape summary
+- `GET /api/reports/employees.csv` — CSV download of roster
+- `GET /api/reports/employees.xlsx` — Excel download of roster (same data, `openpyxl`-generated)
+
+## Next steps
+
+1. Read `FEATURES_TODO.md` and fill it in.
+2. Kick Claude Code off the first feature.
+3. When the welcome page is in the way, delete it — that's item 1 of `FEATURES_TODO.md`.

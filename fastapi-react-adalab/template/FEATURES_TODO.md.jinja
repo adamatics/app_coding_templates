@@ -1,0 +1,43 @@
+# Features TODO — {{ prospect_name }}
+
+This file is your input to Claude Code. Fill it with the features you want built, then tell Claude to work through it.
+
+## How to use this file
+
+1. Sketch features below. One-line summaries are fine to start.
+2. In Claude Code, run something like: _"Read `FEATURES_TODO.md`, ask me any clarifying questions, then propose an implementation order."_
+3. Claude picks the smallest first, implements it following `.claude/rules/feature-pattern.md`, runs `/check`, and stops for review.
+4. Iterate. Don't be afraid to revise this file as you learn.
+
+## Features
+
+### 1. Remove the developer welcome screen
+- Replace `frontend/src/routes/index.tsx` with a proper home page (an overview dashboard, a redirect to `/departments`, or your own landing).
+- Remove the "Tools" and "Developer Guide" navigation items from `frontend/src/components/Sidebar.tsx` if they're not relevant to the real app.
+- Delete this feature from `FEATURES_TODO.md` once done.
+
+### 2. _Add your next feature here_
+- **What:** (one sentence)
+- **Why:** (who benefits, why it matters)
+- **Acceptance:** (how we'll know it's done)
+- **Notes:** (edge cases, constraints, related features)
+
+### 3. _..._
+
+## Example feature sketches
+
+_Delete these once you've written your own._
+
+- **CSV import for Employees** — accept an uploaded roster, validate rows, insert valid ones, surface invalid rows to the user. Use the existing `/api/reports/analyze-csv` endpoint as a starting point.
+- **Monthly headcount report** — generate an Excel file showing headcount per department as of a given month. Mirror the existing `/api/reports/employees.xlsx` pattern.
+- **Archive / reactivate employees** — instead of hard-delete, flip `is_active`. Hide inactive employees from the default list with a toggle to show them.
+- **Department color tags** — add an optional `color` field to `Department` (hex string). Show as a dot next to the department name in lists.
+
+## Notes for Claude
+
+- Follow `.claude/rules/feature-pattern.md` for every backend entity.
+- Follow `.claude/rules/react-components.md` for every frontend page.
+- Do **not** add dependencies without asking. If a feature needs a new library, flag it, propose the library, and wait for approval.
+- Run `/check` before declaring a feature done.
+- The `security-reviewer` agent must approve auth-touching changes before the feature is considered complete.
+- Never commit. The human reviews and commits.

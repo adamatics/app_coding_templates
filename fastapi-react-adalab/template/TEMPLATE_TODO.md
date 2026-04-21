@@ -1,5 +1,12 @@
 # Template TODO
 
+Two lists live in this repo:
+
+- **`FEATURES_TODO.md`** — the list of features *you* want to build. This is your input to Claude Code. Start there.
+- **This file (`TEMPLATE_TODO.md`)** — template-level scaffolding work. Only the Projects feature is listed below. Delete this file once Projects is complete and you no longer need a reference for the feature-pattern.
+
+See `DEVELOPER_GUIDE.md` for the first-run tour.
+
 ## Projects feature (incomplete)
 
 The `Project` SQLModel is defined; routes, service, schemas, UI, and tests are stubs. To complete:
