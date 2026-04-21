@@ -14,6 +14,8 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   uvicorn
+et-xmlfile==2.0.0
+    # via openpyxl
 fastapi==0.136.0
     # via app
 greenlet==3.4.0 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
@@ -24,6 +26,8 @@ httptools==0.7.1
     # via uvicorn
 idna==3.11
     # via anyio
+openpyxl==3.1.5
+    # via app
 pydantic==2.13.3
     # via
     #   app
@@ -38,6 +42,8 @@ python-dotenv==1.2.2
     # via
     #   pydantic-settings
     #   uvicorn
+python-multipart==0.0.26
+    # via app
 pyyaml==6.0.3
     # via uvicorn
 sqlalchemy==2.0.49

@@ -5,9 +5,13 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-import app.models  # noqa: F401  -- register models with metadata
-from app.core.db import get_session
-from main import app
+# Import main AFTER app.core.db so the FastAPI `app` is bound last
+# and isn't shadowed by `import app.<submodule>` elsewhere. main.py's
+# include_all_routers pulls in every routes module at import time,
+# which in turn imports every model, so SQLModel.metadata is fully
+# populated by the time the fixtures run create_all().
+from app.core.db import get_session  # noqa: E402, I001
+from main import app as fastapi_app  # noqa: E402, I001
 
 
 @pytest.fixture(name="session")
@@ -27,11 +31,11 @@ def client_fixture(session: Session) -> Iterator[TestClient]:
     def _override_get_session() -> Iterator[Session]:
         yield session
 
-    app.dependency_overrides[get_session] = _override_get_session
+    fastapi_app.dependency_overrides[get_session] = _override_get_session
     try:
-        yield TestClient(app)
+        yield TestClient(fastapi_app)
     finally:
-        app.dependency_overrides.clear()
+        fastapi_app.dependency_overrides.clear()
 
 
 @pytest.fixture(name="auth_headers")
