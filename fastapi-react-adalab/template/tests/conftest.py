@@ -37,3 +37,11 @@ def client_fixture(session: Session) -> Iterator[TestClient]:
 @pytest.fixture(name="auth_headers")
 def auth_headers_fixture() -> dict[str, str]:
     return {"Authorization": "Bearer demo-token"}
+
+
+@pytest.fixture(name="department")
+def department_fixture(session: Session):
+    from app.schemas.department import DepartmentCreate
+    from app.services.departments import create_department
+
+    return create_department(session, DepartmentCreate(name="Engineering", code="ENG"))
