@@ -1,0 +1,13 @@
+{
+    "app_id": null,
+    "app_name": "fastapi-react-adalab",
+    "app_description": "AdaLab demo template app",
+    "app_url": "fastapi-react-adalab",
+    "stripped_prefix": true,
+    "access_level": "logged_in",
+    "acl_userlist": [],
+    "acl_group_names": [],
+    "idp_enabled": false,
+    "idp_scope": null,
+    "maintainers": []
+}
