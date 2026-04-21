@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { Outlet, createRootRouteWithContext } from '@tanstack/react-router';
 
-import { AppHeader } from '../components/AppHeader';
+import { Sidebar } from '../components/Sidebar';
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: Root,
@@ -9,11 +9,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function Root() {
   return (
-    <>
-      <AppHeader />
-      <main style={{ maxWidth: 1100, margin: '0 auto', padding: 'var(--space-xl)' }}>
-        <Outlet />
+    <div className="layout">
+      <Sidebar />
+      <main className="content">
+        <div className="content-inner">
+          <Outlet />
+        </div>
       </main>
-    </>
+    </div>
   );
 }
