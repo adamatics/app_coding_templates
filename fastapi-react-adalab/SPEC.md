@@ -68,7 +68,7 @@ From the `adalab-app-builder` skill. Any deviation will break deployment.
 - `copier.yml` does **not** ask for logo or colors. The template ships with a neutral default logo and neutral colors.
 - No `post_gen.py` branding logic. The hook script, if it exists at all, does only `chmod +x` on hook scripts and `git init`.
 - The template's `frontend/src/styles/tokens.css` ships with real hex values (neutral defaults), not placeholders. No Jinja substitution needed.
-- All frontend components use `var(--color-primary)` etc. **No hex literals in frontend source outside `tokens.css`.** This is enforced by convention and by `.claude/rules/react-components.md`; it's what makes the re-brand work.
+- All frontend components use `var(--color-primary)` etc. **No hex literals in frontend source outside `tokens.css`.** Enforced by `.claude/rules/react-components.md`. Tokens.css itself is editable by Claude Code (with a prompt) for additive structural tokens, but the three brand hex values at the top of `:root` are documented as off-limits for feature work and are intended for human edits per-demo.
 
 ## Repository layout (stamped output)
 
@@ -148,7 +148,7 @@ From the `adalab-app-builder` skill. Any deviation will break deployment.
 │       ├── test_departments.py
 │       └── test_employees.py
 └── frontend/
-    ├── package.json               # PROTECTED
+    ├── package.json
     ├── pnpm-lock.yaml             # PROTECTED
     ├── vite.config.ts             # PROTECTED (base: './' is required)
     ├── tsconfig.json
@@ -171,7 +171,7 @@ From the `adalab-app-builder` skill. Any deviation will break deployment.
         │   └── projects/
         │       └── index.tsx      # "Coming soon" placeholder
         ├── styles/
-        │   ├── tokens.css         # EDITED PER-DEMO (three hex values at top)
+        │   ├── tokens.css         # SENSITIVE: brand hex per-demo, structural tokens additive
         │   └── globals.css
         ├── components/
         │   ├── DataTable.tsx
@@ -401,6 +401,17 @@ Regex-like patterns that Claude Code attempts to enforce. Fails gracefully on Ba
 ### Layer 3: `.claude/hooks/protect_paths.py` (real enforcement)
 
 PreToolUse hook. Exit code 2 blocks the tool call; stderr is fed back to Claude as feedback. Uses `$CLAUDE_PROJECT_DIR` for portability. Redundantly encodes the same protected paths as Layer 2, plus Bash command denylist. **This is the load-bearing layer.**
+
+### Sensitive-but-editable tier
+
+Five files are not in the hard-blocked tier but are documented as sensitive. They are gated through `permissions.ask` (so each edit prompts the human in-session) or are open with documented constraints:
+
+- `requirements.txt`, `pyproject.toml` — open. After Python dep edits, run `uv sync` and `uv export --no-hashes --no-dev --no-emit-project > requirements.txt` to keep them in sync.
+- `frontend/package.json` — open. After dep edits, `pnpm install` regenerates the lockfile.
+- `.adalab/local_container_demo.json` — gated. Permitted edits: `environment_variables`, `max_ram`, `max_cpu`. Forbidden: `port`, `test_serving_port`, `uid`, `container_image_name`, `container_file`, `build_context`.
+- `frontend/src/styles/tokens.css` — gated. Additive structural tokens permitted. The three brand hex values (`--color-primary`, `--color-secondary`, `--color-accent`) are off-limits for feature work; they're per-demo human edits.
+
+The `business-logic-implementer` subagent's system prompt enumerates the same constraints. The hook's load-bearing protection covers auth, routing, ORM base, build pipeline, lockfiles, AdaLab identity (app.json, project.json), `.vscode/`, `.claude/` meta-config, and secrets — none of which the agent should ever edit.
 
 ## `.claude/settings.json`
 
@@ -959,6 +970,8 @@ The template is complete when all of the following hold:
 12. Invoking `/complete-projects` produces a working Projects feature; tests pass; rebuild shows it deployed
 13. After step 12, asking "remove authentication from the projects route" is blocked by the hook
 14. The template deploys successfully to AdaLab via Test → Build → Deploy
+15. After stamping, asking Claude Code to add a dummy Python dep (e.g. `requests`) results in: pyproject.toml updated, `uv sync` run, requirements.txt regenerated. No hook block.
+16. After stamping, asking Claude Code to add a chart token to `tokens.css` triggers a `permissions.ask` prompt; on approve, the edit succeeds; the three brand hex values are not changed.
 
 ## Build order
 
@@ -991,6 +1004,7 @@ Follow this order. Commit after each step. Each commit is a git reset target.
 - Any hex literal in `frontend/src/` outside `tokens.css`
 - Any deviation from the directory layout
 - Any protected-zone edit (the hook should catch this; if you think it's needed, stop and flag)
+- Adding a dependency that wasn't on the implicit roadmap (e.g. switching ORMs, adding a job queue) — declare and confirm before editing pyproject.toml or package.json.
 - Any attempt to add Alembic or database migrations
 - Any attempt to use separate frontend and backend containers
 - Any attempt to use nginx

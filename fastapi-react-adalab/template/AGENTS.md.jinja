@@ -6,7 +6,7 @@ This file is imported from `CLAUDE.md` and describes the agent and command surfa
 
 Two live under `.claude/agents/`. Invoke them by name.
 
-- **business-logic-implementer** — implements new routes, models, services, schemas, and React pages. Tool set includes Edit/Write; `permissionMode: default` so the PreToolUse hook still fires on every call. Never edits infrastructure files. Always runs `/check` before declaring done. Does not commit.
+- **business-logic-implementer** — implements new routes, models, services, schemas, and React pages, plus declares new dependencies in `pyproject.toml` / `package.json` and AdaLab config tweaks (env vars, resource limits) in `.adalab/local_container_demo.json`. Tool set includes Edit/Write; `permissionMode: default` so the PreToolUse hook still fires on every call. Never edits load-bearing infrastructure files (auth, routing, build pipeline, lockfiles, AdaLab identity files). Always runs `/check` before declaring done. Does not commit.
 
 - **security-reviewer** — read-only auditor. Tools: Read, Grep, Glob, Bash. `permissionMode: plan`. Model: opus. Produces severity-tagged findings across AuthN/AuthZ, input validation, SQL injection, secret leakage, exception handling, CORS/CSRF, and styling rule violations. Only flags issues it is >80% confident are real.
 
