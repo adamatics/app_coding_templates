@@ -1,0 +1,80 @@
+# {{ exercise_title }} — agent guide
+
+**This app has two zones. Edit only one of them.**
+
+- **The seam** (edit these to change the exercise): `exercise/schema.py`,
+  `exercise/analysis.py`, `exercise/content.md`.
+- **The chassis** (identical in every app in this family — do NOT edit per app): the
+  backend, the frontend, deployment config, and this `.claude/` guidance.
+
+Adding or changing a measurement field means editing **`exercise/schema.py` only**. The
+entry form, the results table, the chart candidates and the export columns are all derived
+from that Pydantic model at runtime — they update automatically. You almost never need to
+touch the chassis.
+
+Guardrails are enforced in three layers (Addendum A §A4): this file, the
+`permissions.deny`/`permissions.ask` lists in `.claude/settings.json`, and the real
+enforcement — a `chassis_guard` PreToolUse hook that exits non-zero to block. The three name
+the same protected set.
+
+## Protected zone (do not edit — the hook blocks these)
+
+- `backend/app/**`
+- `frontend/src/App.tsx`
+- `frontend/src/main.tsx`
+- `frontend/src/api.ts`
+- `frontend/src/metaContext.ts`
+- `frontend/src/global.d.ts`
+- `frontend/src/ui.css`
+- `frontend/src/lib/**`
+- `frontend/src/components/**`
+- `frontend/src/pages/**`
+- `frontend/src/assets/**`
+- `frontend/vite.config.ts`
+- `frontend/tsconfig.json`
+- `frontend/index.html`
+- `frontend/scripts/**`
+- `.adalab/app.json`
+- `.adalab/project.json`
+- `.adalab/card.json`
+- `.vscode/**`
+- `Containerfile`
+- `.claude/settings.json`
+- `.claude/hooks/**`
+
+## Editable with confirmation (sensitive, but sometimes legitimately changed)
+
+- `frontend/src/theme.css` — the CPDSE identity. Only the palette tokens live here; never add
+  a hex value elsewhere, and never invent an error red/amber (the palette has none).
+- `.adalab/local_container_demo.json` — deploy resources for this app.
+- `pyproject.toml`, `frontend/package.json`, and dependency-add commands — for adding a
+  library your analysis needs.
+
+The always-writable zone is the exercise seam: `exercise/**`.
+
+## You want to… → edit
+
+- Add / change / remove a measurement field → `exercise/schema.py`
+- Change field units, ranges, or help text → `exercise/schema.py` (in the `Field(...)`)
+- Add a dropdown / date / notes field → `exercise/schema.py` (`Literal[...]`, `date`, `str | None`)
+- Add exercise-specific statistics on the Results page → `exercise/analysis.py` (`summarize(df)`)
+- Change the Home-page instructions → `exercise/content.md`
+
+The form, table, charts and export **follow the schema** — do not hand-edit them.
+
+## How the pieces fit (so you don't reinvent them)
+
+- Persistence is **append-only** with cohort semantics. Students never edit or delete;
+  a correction *supersedes*. "Reset for a new class" = an admin *closes* the cohort and
+  *opens* a new one. Nothing is ever deleted. Do not invent your own storage — see
+  `.claude/skills/lab-exercise-app/references/data-model.md`.
+- Data lives on a mounted AdaLab Shared Volume at `$DATA_DIR` (default `/asv-mnt/lab-data`).
+  The app **fails loud** if that volume isn't mounted/writable — never point `DATA_DIR` at a
+  container-local path to "fix" a startup error; that silently loses a year of data.
+- The measurement contract lives in `exercise/schema.py` as a single Pydantic model named
+  `Measurement`. Keep that name.
+
+## Conventions
+
+Style and component rules are in `.claude/rules/`. Use the **`lab-exercise-app`** skill for
+any request to adapt the app, and `/new-exercise-field` to add a field interactively.

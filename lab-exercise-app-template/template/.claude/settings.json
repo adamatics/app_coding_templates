@@ -1,0 +1,127 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/chassis_guard.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.py\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/session_start.py\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Edit(backend/app/**)",
+      "Write(backend/app/**)",
+      "MultiEdit(backend/app/**)",
+      "Edit(frontend/src/App.tsx)",
+      "Write(frontend/src/App.tsx)",
+      "MultiEdit(frontend/src/App.tsx)",
+      "Edit(frontend/src/main.tsx)",
+      "Write(frontend/src/main.tsx)",
+      "MultiEdit(frontend/src/main.tsx)",
+      "Edit(frontend/src/api.ts)",
+      "Write(frontend/src/api.ts)",
+      "MultiEdit(frontend/src/api.ts)",
+      "Edit(frontend/src/metaContext.ts)",
+      "Write(frontend/src/metaContext.ts)",
+      "MultiEdit(frontend/src/metaContext.ts)",
+      "Edit(frontend/src/global.d.ts)",
+      "Write(frontend/src/global.d.ts)",
+      "MultiEdit(frontend/src/global.d.ts)",
+      "Edit(frontend/src/ui.css)",
+      "Write(frontend/src/ui.css)",
+      "MultiEdit(frontend/src/ui.css)",
+      "Edit(frontend/src/lib/**)",
+      "Write(frontend/src/lib/**)",
+      "MultiEdit(frontend/src/lib/**)",
+      "Edit(frontend/src/components/**)",
+      "Write(frontend/src/components/**)",
+      "MultiEdit(frontend/src/components/**)",
+      "Edit(frontend/src/pages/**)",
+      "Write(frontend/src/pages/**)",
+      "MultiEdit(frontend/src/pages/**)",
+      "Edit(frontend/src/assets/**)",
+      "Write(frontend/src/assets/**)",
+      "MultiEdit(frontend/src/assets/**)",
+      "Edit(frontend/vite.config.ts)",
+      "Write(frontend/vite.config.ts)",
+      "MultiEdit(frontend/vite.config.ts)",
+      "Edit(frontend/tsconfig.json)",
+      "Write(frontend/tsconfig.json)",
+      "MultiEdit(frontend/tsconfig.json)",
+      "Edit(frontend/index.html)",
+      "Write(frontend/index.html)",
+      "MultiEdit(frontend/index.html)",
+      "Edit(frontend/scripts/**)",
+      "Write(frontend/scripts/**)",
+      "MultiEdit(frontend/scripts/**)",
+      "Edit(.adalab/app.json)",
+      "Write(.adalab/app.json)",
+      "MultiEdit(.adalab/app.json)",
+      "Edit(.adalab/project.json)",
+      "Write(.adalab/project.json)",
+      "MultiEdit(.adalab/project.json)",
+      "Edit(.adalab/card.json)",
+      "Write(.adalab/card.json)",
+      "MultiEdit(.adalab/card.json)",
+      "Edit(.vscode/**)",
+      "Write(.vscode/**)",
+      "MultiEdit(.vscode/**)",
+      "Edit(Containerfile)",
+      "Write(Containerfile)",
+      "MultiEdit(Containerfile)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "MultiEdit(.claude/settings.json)",
+      "Edit(.claude/hooks/**)",
+      "Write(.claude/hooks/**)",
+      "MultiEdit(.claude/hooks/**)"
+    ],
+    "ask": [
+      "Edit(frontend/src/theme.css)",
+      "Write(frontend/src/theme.css)",
+      "MultiEdit(frontend/src/theme.css)",
+      "Edit(.adalab/local_container_demo.json)",
+      "Write(.adalab/local_container_demo.json)",
+      "MultiEdit(.adalab/local_container_demo.json)",
+      "Edit(pyproject.toml)",
+      "Write(pyproject.toml)",
+      "MultiEdit(pyproject.toml)",
+      "Edit(frontend/package.json)",
+      "Write(frontend/package.json)",
+      "MultiEdit(frontend/package.json)",
+      "Bash(pip install:*)",
+      "Bash(uv add:*)",
+      "Bash(uv pip install:*)",
+      "Bash(poetry add:*)",
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(npm add:*)"
+    ]
+  }
+}

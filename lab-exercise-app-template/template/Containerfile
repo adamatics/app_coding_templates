@@ -1,0 +1,48 @@
+# CHASSIS. Multi-stage build: stage 1 builds the React frontend, stage 2 is a Python
+# image that serves the API AND the static frontend from one uvicorn process on $APP_PORT.
+#
+# Builds and runs with plain podman/docker, e.g.:
+#   docker build -t my-app .
+#   docker run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e ADMIN_PASSWORD=x my-app
+#
+# NOTE (Addendum A): a writable volume MUST be mounted at $DATA_DIR (/asv-mnt/lab-data).
+# The app refuses to start otherwise, so student data is never written to throwaway
+# container-local storage. See README "Access" / deployment prerequisites.
+
+# --- Stage 1: build the frontend -------------------------------------------
+FROM node:20-slim AS frontend
+WORKDIR /fe
+COPY frontend/package.json ./
+RUN npm install --no-audit --no-fund
+COPY frontend/ ./
+# Runs the brand check (no raw hex outside theme.css), type-check, then vite build.
+RUN npm run build
+
+# --- Stage 2: Python runtime -----------------------------------------------
+FROM python:3.11-slim AS runtime
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DATA_DIR=/asv-mnt/lab-data \
+    APP_PORT=8000 \
+    DEMO_MODE=false \
+    PYTHONPATH=/app/backend:/app
+WORKDIR /app
+
+# Install Python dependencies from pyproject (the single source of truth). Packages are
+# also installed, but at runtime PYTHONPATH points at the source tree so content.md and
+# the built static assets resolve from /app (they are not wheel package-data).
+COPY pyproject.toml ./
+COPY backend/ ./backend/
+COPY exercise/ ./exercise/
+RUN pip install .
+
+# Bring the built frontend in so FastAPI serves it from backend/app/static/.
+COPY --from=frontend /fe/dist ./backend/app/static
+
+EXPOSE 8000
+
+# AdaLab serves the app under /apps/<slug>/ with stripped_prefix=true, so uvicorn only ever
+# sees stripped paths; the frontend resolves its base path from the URL at runtime. No
+# proxy-header/base-path wiring needed here.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${APP_PORT:-8000}"]

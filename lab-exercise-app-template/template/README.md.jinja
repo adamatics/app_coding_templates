@@ -1,0 +1,134 @@
+# {{ exercise_title }}
+
+A CPDSE student lab-exercise app for {{ course_code }}. Part of the lab-exercise-app family:
+identical look and behaviour across exercises, durable results across years.
+
+## What it does
+
+Student groups record their measurements for one lab exercise and compare results — within
+the class and against previous years.
+
+- Students make a group (just names — no accounts), enter measurements in a guided form, and
+  see everyone's latest results on a table and chart.
+- A cohort selector including "All years" lets students compare with previous cohorts and
+  download a CSV for their own analysis.
+- Results are append-only. A mistake is fixed with a correction that supersedes the old
+  reading, keeping an honest history. Nothing students do can destroy data.
+- An admin area (single password) manages cohorts, groups and exports, and can seed demo
+  data. "Resetting for a new class" closes the current cohort and opens a new one — the old
+  cohort stays fully visible and exportable.
+
+## How to use it
+
+For students:
+
+- Open the app, go to Groups, add your names, and create or join a group.
+- Go to Enter results, choose your group, fill in the form, and submit.
+- Go to Results to see the table and chart, switch cohorts, or download the CSV.
+
+For the instructor / admin:
+
+- Open Admin and sign in with the admin password (set via the `ADMIN_PASSWORD` environment
+  variable at deploy time).
+- Open a cohort for the new class, close it when the class is done, and open the next one.
+- Export CSV or Parquet, latest-only or full history, per cohort or across all cohorts.
+
+To change the exercise itself (fields, analysis, instructions), edit only:
+
+```
+exercise/schema.py     the measurement fields (form, table, chart, export all follow)
+exercise/analysis.py   optional derived statistics
+exercise/content.md     the Home-page instructions
+```
+
+Run it locally (a writable volume MUST be mounted at the data path):
+
+```
+podman build -t {{ project_slug }} .
+podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e ADMIN_PASSWORD=change-me {{ project_slug }}
+```
+
+Then open http://localhost:8000
+
+## Tech stack
+
+- Backend: Python 3.11, FastAPI, SQLite (WAL mode), SQLAlchemy 2, Pydantic v2.
+- Frontend: React 18 + Vite + TypeScript, built to static files and served by the same
+  FastAPI process. One container, one process, one port (8000).
+- Visual identity: the fixed CPDSE palette and Verdana typography, defined once in
+  `frontend/src/theme.css`.
+
+Branding note: this app ships with PLACEHOLDER CPDSE logo SVGs (a simple snake mark and
+wordmark in the correct colourways) at `frontend/src/assets/` and `frontend/public/favicon.svg`.
+Replace them with the official CPDSE assets from the published logo package before any real
+use. Accessibility note: body text is Charcoal on Soft White / Ivory Gold Tint (both meet
+WCAG AA); the header title uses Soft White on Forest Green as the identity specifies.
+
+## Dependencies
+
+- A container runtime (Podman or Docker) to build and run the image.
+- A persistent, writable volume mounted at the data path — see Access.
+- No external services, no database server, no accounts. Python and Node dependencies are
+  pinned in `pyproject.toml` and `frontend/package.json`.
+
+## Source
+
+- Repository: <repo URL>
+- Stamped from the `lab-exercise-app` Copier template (CPDSE).
+
+## Access
+
+- Students: no login. Identification is by choosing your group from the dropdown (honour
+  system by design). When deploying on AdaLab, set the app's Access Control to **Public** if
+  students do not have AdaLab accounts. The manifest ships `access_level: logged_in` as the
+  safe default; changing it to public is a deliberate teacher decision, recorded in the
+  versioned `.adalab/app.json`.
+- Admin: protected by the `ADMIN_PASSWORD` environment variable, compared constant-time; the
+  session is a signed, HTTP-only cookie. If `ADMIN_PASSWORD` is unset the admin area is
+  disabled (fail closed). To rotate the password, redeploy with a new value — there is no
+  password stored on disk and no self-service password UI.
+- Environment variables (complete set): `DATA_DIR` (default `/asv-mnt/lab-data`),
+  `ADMIN_PASSWORD` (required for admin), `DEMO_MODE` (default `false`).
+
+### Persistent storage (deployment prerequisite)
+
+The app stores everything under `DATA_DIR` (default `/asv-mnt/lab-data`) and **refuses to
+start if that path is not a mounted, writable volume** — student data is never written to
+disposable container-local storage, which would be lost on the next redeploy.
+
+- This is a **single-replica** app: SQLite in WAL mode is a single-instance embedded
+  database. Do **not** scale it horizontally — multiple replicas over one volume corrupt it.
+- Persistence uses an **AdaLab Shared Volume (ASV)** with **Fast Mount** — required, not an
+  optimization: SQLite over a plain network mount is the wrong shape for write traffic.
+
+One-time ASV setup runbook (a fresh volume has no filesystem permissions, so writes fail
+until you chmod it — the mount can show green and every write still `PermissionError`s):
+
+1. Create the volume on the AdaLab **Volumes** page.
+2. Set its **ACL** (View / Mount / Edit) so you may attach it.
+3. Mount it in a **lab**, open a terminal, and run (replaces the missing permissions):
+
+   ```bash
+   sudo chown root:$NB_GROUP <Volume_Name>
+   sudo chmod 775 <Volume_Name>
+   ```
+
+4. In the **App Deployment** wizard, mount the volume at mount path `lab-data` (the platform
+   prefixes `/asv-mnt/`, giving `/asv-mnt/lab-data`) with **Fast Mount ON**.
+
+Both layers are required: correct ACL without the chmod means writes fail; correct chmod
+without ACL means you cannot mount. (This chmod step is expected to become implicit in
+AdaLab v1.6.)
+
+### Deployment order
+
+Deploy in the order **Test → Build → Deploy**. Skipping Build breaks a first-time Deploy.
+
+```yaml
+asset: app
+owner: {{ contact_email }}
+version: 0.1.0
+use: https://<your-adalab-host>/apps/{{ project_slug }}/
+source: <repo URL>
+data: $DATA_DIR/results.sqlite (exports: /api/export)
+```

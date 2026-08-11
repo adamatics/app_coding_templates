@@ -1,0 +1,10 @@
+<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CPDSE mark">
+  <!-- PLACEHOLDER: snake-without-text mark in Antique Gold. Replace with the official
+       CPDSE asset from the published logo package. -->
+  <g fill="none" stroke="#D6C17C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 9 C 35 13, 12 22, 30 26 C 45 30, 20 38, 29 43" />
+  </g>
+  <circle cx="16" cy="9" r="3.3" fill="#D6C17C" />
+  <line x1="13.5" y1="7" x2="9" y2="5" stroke="#D6C17C" stroke-width="2" stroke-linecap="round" />
+  <line x1="13.5" y1="8.5" x2="9" y2="9" stroke="#D6C17C" stroke-width="2" stroke-linecap="round" />
+</svg>

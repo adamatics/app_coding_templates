@@ -1,0 +1,91 @@
+"""Runtime configuration (CHASSIS — do not edit per app).
+
+Two kinds of value live here:
+
+* **Stamped identity** — injected once by Copier at generation time (exercise title,
+  course code, host institution, contact email, default cohort label). These describe
+  *which* exercise this app is; they are labels, not behaviour, and are overridable by
+  environment variables of the same name if a deployment needs to.
+* **Deployment env** — parsed from the environment at process start: ``DATA_DIR``,
+  ``ADMIN_PASSWORD``, ``DEMO_MODE``, ``APP_PORT``.
+
+The sub-path an app is served under is **not** configured here: the frontend resolves it at
+runtime from the URL (see ``frontend/src/lib/basepath.ts``), and AdaLab strips the prefix
+before the backend sees the request, so one image runs at ``/`` or at ``/apps/<slug>/``.
+
+Keep dependencies minimal: plain ``os.environ`` parsing, no settings library.
+"""
+from __future__ import annotations
+
+import os
+import secrets
+from dataclasses import dataclass, field
+from pathlib import Path
+
+# The single container always listens on 8000 (Addendum A §A5). APP_PORT can still
+# override it for local runs, but nothing asks for it at stamp time.
+DEFAULT_PORT = 8000
+# AdaLab mounts persistent volumes under /asv-mnt/ (Addendum A §A5).
+DEFAULT_DATA_DIR = "/asv-mnt/lab-data"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Full institution names for the footer affiliation line (spec §4: host_institution
+# controls the footer only). The stamped value is the key.
+INSTITUTION_NAMES = {
+    "SDU": "University of Southern Denmark (SDU)",
+    "UCPH": "University of Copenhagen (UCPH)",
+    "CPDSE": "Center for Pharmaceutical Data Science Education (CPDSE)",
+}
+
+
+@dataclass(frozen=True)
+class Settings:
+    # --- stamped identity (Copier), env-overridable -------------------------
+    project_name: str = os.environ.get("PROJECT_NAME", {{ project_name | tojson }})
+    project_slug: str = os.environ.get("PROJECT_SLUG", {{ project_slug | tojson }})
+    exercise_title: str = os.environ.get("EXERCISE_TITLE", {{ exercise_title | tojson }})
+    course_code: str = os.environ.get("COURSE_CODE", {{ course_code | tojson }})
+    host_institution: str = os.environ.get("HOST_INSTITUTION", {{ host_institution | tojson }})
+    contact_email: str = os.environ.get("CONTACT_EMAIL", {{ contact_email | tojson }})
+    default_cohort_label: str = os.environ.get(
+        "DEFAULT_COHORT_LABEL", {{ default_cohort_label | tojson }}
+    )
+
+    # --- deployment env -----------------------------------------------------
+    data_dir: Path = field(
+        default_factory=lambda: Path(os.environ.get("DATA_DIR", DEFAULT_DATA_DIR))
+    )
+    admin_password: str | None = os.environ.get("ADMIN_PASSWORD") or None
+    demo_mode: bool = field(default_factory=lambda: _env_bool("DEMO_MODE", False))
+    app_port: int = field(default_factory=lambda: int(os.environ.get("APP_PORT", str(DEFAULT_PORT))))
+
+    # Session-signing secret is DERIVED AT STARTUP (spec §8): never stored on disk.
+    # Cookies therefore invalidate on restart — admins simply log in again.
+    session_secret: str = field(default_factory=lambda: secrets.token_hex(32))
+
+    @property
+    def institution_name(self) -> str:
+        return INSTITUTION_NAMES.get(self.host_institution, self.host_institution)
+
+    @property
+    def db_path(self) -> Path:
+        return self.data_dir / "results.sqlite"
+
+    @property
+    def exports_dir(self) -> Path:
+        return self.data_dir / "exports"
+
+    @property
+    def admin_enabled(self) -> bool:
+        """Admin area is disabled (fail closed) when no password is configured."""
+        return bool(self.admin_password)
+
+
+settings = Settings()
