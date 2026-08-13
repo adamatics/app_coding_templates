@@ -17,7 +17,14 @@
     "max_ram": 1500,
     "min_ram": 200,
     "command": null,
-    "environment_variables": [],
+    "environment_variables": [
+        {"key": "COURSE_PASSWORD", "value": ""},
+        {"key": "ADMIN_PASSWORD", "value": ""},
+        {"key": "STORAGE_MODE", "value": "volume"},
+        {"key": "DEMO_MODE", "value": "false"},
+        {"key": "SESSION_TTL_DAYS", "value": "30"},
+        {"key": "LOG_PII", "value": "false"}
+    ],
     "is_locked": false,
     "volume_mounts": []
 }

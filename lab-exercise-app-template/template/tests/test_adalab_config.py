@@ -209,3 +209,45 @@ def test_data_dir_default_matches_the_documented_mount_path():
     mount_path = DEFAULT_DATA_DIR[len("/asv-mnt/"):]
     assert mount_path and "/" not in mount_path.rstrip("/"), (
         "the mount_path to enter in the deploy wizard should be a single path segment")
+
+
+# --- the env vars a deployer needs to see -----------------------------------
+def test_the_useful_environment_variables_are_declared():
+    """Pre-declaring the keys makes them visible in the deploy wizard.
+
+    An empty `environment_variables` list means a deployer has to know the variable names
+    from the README and type each one. Shipping the keys turns the wizard into the
+    documentation: every knob that matters is on screen, ready to fill in.
+    """
+    expected = {"COURSE_PASSWORD", "ADMIN_PASSWORD", "STORAGE_MODE", "DEMO_MODE"}
+    for path in container_files():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not data.get("primary_container"):
+            continue
+        declared = {entry["key"] for entry in data.get("environment_variables", [])}
+        missing = expected - declared
+        assert not missing, (
+            f"{path.name}: the deploy wizard should offer {missing} — declare each key so a "
+            f"deployer does not have to know it from memory")
+
+
+def test_declared_defaults_are_safe_to_ship():
+    """Defaults may be shipped for behaviour, never for secrets.
+
+    `STORAGE_MODE=volume` and `DEMO_MODE=false` are the safe production values, so committing
+    them is helpful. A committed password is different: it would be a working credential in a
+    public repository, and the app is deployed with `access_level: public`.
+    """
+    safe_defaults = {"STORAGE_MODE": "volume", "DEMO_MODE": "false"}
+    for path in container_files():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for entry in data.get("environment_variables", []):
+            key, value = entry["key"], entry["value"]
+            if key in safe_defaults:
+                assert value == safe_defaults[key], (
+                    f"{path.name}: {key} should ship as {safe_defaults[key]!r} — the value a "
+                    f"real class needs — not {value!r}")
+            if "PASSWORD" in key.upper():
+                assert value == "", (
+                    f"{path.name}: {key} must ship empty. A committed password is a working "
+                    f"credential for a publicly accessible app; set it in the deploy wizard.")

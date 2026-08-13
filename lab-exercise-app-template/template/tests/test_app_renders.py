@@ -216,3 +216,151 @@ def test_leaving_the_course_returns_to_the_gate(app):
     assert not _state(app, "gate_ok")
     assert not _state(app, "member_id")
     assert not _has_nav(app)
+
+
+# --- coming back later: the session must survive leaving the app -------------
+#
+# Reported from the deployed app: "when I go to the app url again after having registered I
+# get asked for the course password again, and then to re-register." The token was kept only
+# in the URL (`?s=…`), which survives a refresh but not the thing students actually do — open
+# the app from the gallery, a bookmark, or a link, all of which load the bare URL. Every visit
+# then created a duplicate registration.
+def test_the_session_token_is_not_only_in_the_url(app):
+    """The token must be written somewhere the browser keeps, not just the address bar."""
+    from ui import session_url
+
+    source = (Path(session_url.__file__)).read_text(encoding="utf-8")
+    assert "cookies" in source, (
+        "session persistence must read a cookie as well as the URL parameter, or a student "
+        "opening the app from the gallery is asked to register again every time")
+    assert "st.context.cookies" in source, "read the cookie server-side, before anything renders"
+
+
+def test_the_cookie_is_named_per_app():
+    """Several CPDSE apps share one hostname — a shared cookie name crosses their sessions."""
+    from core.config import settings
+    from ui.session_url import _cookie_name
+
+    name = _cookie_name()
+    assert settings.project_slug.replace("-", "_") in name, \
+        f"cookie name {name!r} must include the app slug"
+
+
+def test_a_token_from_the_url_wins_over_the_cookie(monkeypatch):
+    """An explicit link is a deliberate act; a cookie is not. Support depends on this."""
+    from ui import session_url
+
+    monkeypatch.setattr(session_url, "_from_url", lambda: "from-url")
+    monkeypatch.setattr(session_url, "_from_cookie", lambda: "from-cookie")
+    assert session_url.read_session_token() == "from-url"
+
+    monkeypatch.setattr(session_url, "_from_url", lambda: None)
+    assert session_url.read_session_token() == "from-cookie"
+
+
+# --- the admin form: typing then clicking Save must save what was typed ------
+#
+# Reported from the deployed app: "saving an admin setting like the name does nothing." A bare
+# st.text_input only sends its value on blur or Enter, so typing and clicking Save could store
+# the PREVIOUS value — and the click that committed the text often did not register as a
+# button press either. Inside a form, every field is submitted with the button in one go.
+def test_the_course_settings_are_a_form(app):
+    """The fix is structural, so the test is too: no bare Save button on this tab."""
+    from ui import admin_page
+
+    source = Path(admin_page.__file__).read_text(encoding="utf-8")
+    assert 'st.form("course_settings")' in source, (
+        "course settings must be a form; with bare widgets, typing a value and clicking Save "
+        "can persist the value from before the edit")
+    assert 'st.button("Save course settings"' not in source, \
+        "the save control must be the form's submit button, not a separate st.button"
+
+
+def test_saving_course_settings_persists_every_field(app):
+    """End to end through the real app: sign in, open Admin, submit the form, read it back."""
+    from core import admin as core_admin
+    from core.db import get_session
+
+    _pass_gate(app)
+    _register(app)
+    _button(app, "Admin").click().run()
+
+    _input(app, "admin password").set_value("admin-secret")
+    _button(app, "Sign in").click().run()
+    _assert_clean(app, "admin signed in")
+
+    _input(app, "Course name").set_value("Farmaceutisk kemi")
+    _input(app, "Instructor").set_value("Dr Test")
+    next(a for a in app.text_area if "banner" in a.label.lower()).set_value("Use fridge C")
+    _button(app, "Save course settings").click().run()
+    _assert_clean(app, "after saving course settings")
+
+    with get_session() as session:
+        assert core_admin.get_setting(session, "course_name") == "Farmaceutisk kemi"
+        assert core_admin.get_setting(session, "instructor") == "Dr Test"
+        assert core_admin.get_setting(session, "banner") == "Use fridge C"
+
+
+def test_rendering_the_admin_tab_does_not_rewrite_the_settings(app):
+    """The form body re-runs on every render; only a submit may write.
+
+    Without this, any click anywhere in the app would rewrite every course setting with
+    whatever the widgets last held — silently reverting an edit made in another tab.
+    """
+    from core import admin as core_admin
+    from core.db import get_session
+
+    with get_session() as session:
+        core_admin.set_setting(session, "instructor", "Set Elsewhere")
+
+    _pass_gate(app)
+    _register(app)
+    _button(app, "Admin").click().run()
+    _input(app, "admin password").set_value("admin-secret")
+    _button(app, "Sign in").click().run()
+    # Re-render the tab a few times without submitting.
+    _button(app, "My group").click().run()
+    _button(app, "Admin").click().run()
+    _assert_clean(app, "admin re-rendered")
+
+    with get_session() as session:
+        assert core_admin.get_setting(session, "instructor") == "Set Elsewhere", \
+            "rendering the admin tab must not write settings — only the submit button may"
+
+
+def test_a_rerun_from_another_widget_does_not_change_the_page(app):
+    """Reported from the deployed app: "when hitting Enter I get taken out of the admin page".
+
+    Pressing Enter in a text field reruns the script. Navigation used to be derived from the
+    sidebar radio's return value, so any rerun re-asserted the radio's selection and threw the
+    teacher back to the page they came from — mid-edit, losing what they had typed. Only a
+    deliberate interaction with a navigation control may move the page.
+    """
+    _pass_gate(app)
+    _register(app)
+    _button(app, "Admin").click().run()
+    _input(app, "admin password").set_value("admin-secret")
+    _button(app, "Sign in").click().run()
+    assert _state(app, "page") == "Admin"
+
+    # The rerun a text field causes when the user presses Enter.
+    _input(app, "Course name").set_value("Typed but not saved").run()
+    _assert_clean(app, "after a rerun from a text field")
+    assert _state(app, "page") == "Admin", (
+        "a rerun caused by a text field must not navigate — the teacher was editing")
+
+    # And again from a page that is not the one the radio remembers.
+    _button(app, "My group").click().run()
+    assert _state(app, "page") == "My group"
+    _assert_clean(app, "my group")
+
+
+def test_the_exercise_menu_shows_nothing_selected_on_a_secondary_page(app):
+    """The sidebar must not claim the student is on "Data capture" while Admin is open."""
+    _pass_gate(app)
+    _register(app)
+    assert _nav(app).value == "Data capture"
+
+    _button(app, "Admin").click().run()
+    assert _nav(app).value is None, (
+        f"expected no exercise page highlighted while on Admin, got {_nav(app).value!r}")

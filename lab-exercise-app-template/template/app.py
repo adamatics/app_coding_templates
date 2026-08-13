@@ -58,6 +58,29 @@ SECONDARY_PAGES = {
 PAGES = {**EXERCISE_PAGES, **SECONDARY_PAGES}
 LANDING_PAGE = next(iter(EXERCISE_PAGES))
 
+# The sidebar radio's own state. Kept separate from "page", which is the app's single source
+# of truth for what to render: the radio only covers the exercise pages, and is deliberately
+# left unselected while a secondary page is open.
+NAV_KEY = "nav_radio"
+
+
+def _select_page(label: str) -> None:
+    """Go to a page. The only function allowed to change what is rendered."""
+    st.session_state["page"] = label
+    if label in SECONDARY_PAGES:
+        # Nothing in the exercise menu is current, so highlight nothing — the sidebar must
+        # not claim the student is on "Data capture" while they are reading the FAQ's admin.
+        st.session_state[NAV_KEY] = None
+    else:
+        st.session_state[NAV_KEY] = label
+
+
+def _nav_radio_changed() -> None:
+    """Fires only when the student actually picks a different entry in the exercise menu."""
+    chosen = st.session_state.get(NAV_KEY)
+    if chosen in EXERCISE_PAGES:
+        st.session_state["page"] = chosen
+
 
 @st.cache_resource
 def _bootstrap() -> dict:
@@ -169,25 +192,27 @@ def main() -> None:
 
     page = st.session_state.get("page") or LANDING_PAGE
     if page not in PAGES:                       # stale state from an older version
-        page = LANDING_PAGE
+        page = st.session_state["page"] = LANDING_PAGE
 
     with st.sidebar:
         st.markdown(f"**{settings.exercise_title}**")
         st.caption(settings.course_code)
 
-        # index=None leaves the radio unselected while a secondary page is open, so the
-        # sidebar never claims the student is on "Data capture" when they are not.
-        options = list(EXERCISE_PAGES)
-        chosen = st.radio("Go to", options, label_visibility="collapsed",
-                          index=options.index(page) if page in EXERCISE_PAGES else None)
-        if chosen is not None and chosen != page:
-            page = st.session_state["page"] = chosen
+        # Navigation changes ONLY in these callbacks — never from a widget's return value.
+        #
+        # It used to read the radio's return and compare it to the current page, which meant
+        # any *passive* rerun could navigate: pressing Enter in an admin text field reran the
+        # script, the radio reported its stored selection, that differed from "Admin", and the
+        # teacher was thrown back to the page they came from mid-edit. A callback fires only
+        # on a real change, so a rerun caused by anything else cannot move the page.
+        st.session_state.setdefault(NAV_KEY, LANDING_PAGE)
+        st.radio("Go to", list(EXERCISE_PAGES), key=NAV_KEY, on_change=_nav_radio_changed,
+                 label_visibility="collapsed")
 
         with st.expander("More", expanded=page in SECONDARY_PAGES):
             for label in SECONDARY_PAGES:
-                if st.button(label, use_container_width=True, key=f"nav_{label}"):
-                    st.session_state["page"] = label
-                    st.rerun()
+                st.button(label, use_container_width=True, key=f"nav_{label}",
+                          on_click=_select_page, args=(label,))
 
         st.markdown("---")
         _sidebar_identity(ctx)

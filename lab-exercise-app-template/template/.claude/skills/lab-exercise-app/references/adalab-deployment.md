@@ -56,6 +56,34 @@ with `CONTAINER_READINESS_FAILED: Unexpected status code: 404`.
 
 `tests/test_adalab_config.py` asserts the two settings stay consistent in both directions.
 
+## Environment variables
+
+`.adalab/local_container_1.json` ships with the keys already declared, so the deploy wizard
+shows every knob that matters instead of an empty list:
+
+| Variable | Shipped default | What it does |
+| --- | --- | --- |
+| `COURSE_PASSWORD` | *(empty)* | the class gate. **Empty means no student can sign in** — set it in the wizard |
+| `ADMIN_PASSWORD` | *(empty)* | the Admin page. Empty disables admin entirely |
+| `STORAGE_MODE` | `volume` | `local` writes to ordinary disk instead of a Shared Volume (not durable) |
+| `DEMO_MODE` | `false` | `true` seeds example students and results |
+| `SESSION_TTL_DAYS` | `30` | how long a student stays signed in |
+| `LOG_PII` | `false` | `true` includes KUIDs in the container log |
+
+Other variables (`DATA_DIR`, `COURSE_ID`, `EXERCISE_TITLE`, `CONTACT_EMAIL`,
+`HOST_INSTITUTION`, `DEFAULT_COHORT_LABEL`, `APP_DESCRIPTION`, `APP_PORT`, `BASE_URL_PATH`,
+`ALLOW_SCHEMA_MISMATCH`) are read too, but are not pre-declared: they have working defaults
+from the Copier answers and adding them to the wizard is noise. Add a row when you need one.
+
+**The two passwords ship empty on purpose.** A value committed here is a working credential in
+a public repository for an app deployed with `access_level: public` — anyone could sign in as a
+student, and with the admin password, export every student's name and KUID. Set them in the
+wizard, where they belong, and rotate `COURSE_PASSWORD` each semester. A test fails the build
+if a password value is ever committed.
+
+If you want a throwaway test app to come up without touching the wizard, set `STORAGE_MODE` to
+`local` and fill the two passwords **in the wizard** — not in the file.
+
 ## Persistence: the Shared Volume (ASV)
 
 Container filesystems are wiped on every redeploy. An ASV is the only correct place for
