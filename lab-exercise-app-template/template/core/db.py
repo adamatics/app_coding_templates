@@ -7,6 +7,7 @@ disposable container-local storage. Only the per-app subdirectory inside it is c
 """
 from __future__ import annotations
 
+import os
 import textwrap
 from collections.abc import Iterator
 
@@ -72,10 +73,12 @@ def require_writable_data_dir() -> None:
         """).strip())
     if not data_dir.is_dir():
         raise StorageError(f"DATA_DIR exists but is not a directory: {data_dir}")
-    probe = data_dir / ".write-probe"
+    # Unique per app and process — several course apps share one volume (§B6), and a fixed
+    # probe name lets two simultaneous starts delete each other's file.
+    probe = data_dir / f".write-probe-{settings.project_slug}-{os.getpid()}"
     try:
         probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
+        probe.unlink(missing_ok=True)
     except OSError as exc:
         raise StorageError(textwrap.dedent(f"""
             DATA_DIR is not writable: {data_dir} ({exc})

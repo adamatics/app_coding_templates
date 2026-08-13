@@ -73,7 +73,20 @@ scheduling problem, not a technical one.
 ### 2. The one-time chmod (the single most common failure)
 
 A new volume has ACL access but no filesystem permissions: the ACL is green, the mount
-succeeds, and every write still raises `PermissionError`. Once per volume, from a lab terminal:
+succeeds, and every write still raises `PermissionError`.
+
+Note there are **two distinct mount actions**, each with its own mount path, and they do not
+have to match:
+
+| | Where | Mount path | Result |
+| --- | --- | --- | --- |
+| **Lab** | burger menu → Volumes → **Mount** | pre-filled with the volume name, spaces as underscores (e.g. `CPDSE_Course_App_Data`) | `~/asv-mnt/<that>` — for browsing and the chmod. "Mount from root" checked gives `/asv-mnt/<that>` instead; "Read only" must be unchecked to chmod. |
+| **App** | App Deployment wizard → Volume mounts | whatever the app expects — `lab-data` for this template | `/asv-mnt/lab-data`, matching `DATA_DIR` |
+
+Doing one does not do the other. If a user says "I mounted it", ask which — and if writes
+fail, check the app's mount path matches `DATA_DIR`, not the lab's.
+
+Attach it to a lab first, then run once per volume from a lab terminal:
 
 ```bash
 cd ~/asv-mnt

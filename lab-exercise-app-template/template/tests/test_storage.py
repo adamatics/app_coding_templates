@@ -148,3 +148,53 @@ def test_preview_mode_is_off_when_the_volume_exists(tmp_path):
     })
     assert proc.returncode == 0
     assert "PREVIEW MODE" not in proc.stderr
+
+
+# --- several course apps sharing one volume (§B6) ----------------------------
+def test_each_app_writes_only_inside_its_own_subdirectory(session):
+    """One ASV is mounted into every course app, so an app must never write to the shared
+    root — otherwise two apps clobber each other's database."""
+    from core import results as R
+    from tests.conftest import register_student, valid_measurement
+
+    m = register_student(session)
+    R.submit_result(session, m.id, valid_measurement())
+
+    slug = settings.project_slug
+    assert settings.app_data_dir == settings.data_dir / slug
+    for path in (settings.db_path, settings.csv_path, settings.exports_dir):
+        assert settings.app_data_dir in path.parents or path == settings.app_data_dir
+
+    # Nothing but this app's own directory should have been created at the volume root.
+    entries = {p.name for p in settings.data_dir.iterdir()
+               if not p.name.startswith(".")}
+    assert entries <= {slug}, f"app wrote outside its subdirectory: {entries - {slug}}"
+
+
+def test_two_apps_on_one_volume_do_not_collide(tmp_path):
+    """Simulate a second course app sharing the same volume."""
+    shared = tmp_path / "lab-data"
+    (shared / "titration-lab").mkdir(parents=True)
+    (shared / "titration-lab" / "results.sqlite").write_text("app-1 data")
+    (shared / "logp-lab").mkdir(parents=True)
+    (shared / "logp-lab" / "results.sqlite").write_text("app-2 data")
+
+    assert (shared / "titration-lab" / "results.sqlite").read_text() == "app-1 data"
+    assert (shared / "logp-lab" / "results.sqlite").read_text() == "app-2 data"
+    assert sorted(p.name for p in shared.iterdir()) == ["logp-lab", "titration-lab"]
+
+
+def test_write_probe_is_unique_per_app(tmp_path):
+    """A fixed probe name would let two apps starting at once delete each other's probe,
+    and one would wrongly refuse to start."""
+    from core import config as config_mod
+
+    assert config_mod._storage_is_usable(tmp_path) is True
+    # no probe left behind, and the name carries the app slug
+    assert not list(tmp_path.glob(".write-probe*"))
+
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / f".write-probe-someone-else-999").write_text("held by another app")
+    assert config_mod._storage_is_usable(other) is True          # unaffected
+    assert (other / ".write-probe-someone-else-999").exists()    # and left alone

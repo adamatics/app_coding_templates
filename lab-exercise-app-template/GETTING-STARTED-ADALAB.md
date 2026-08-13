@@ -222,30 +222,65 @@ If you or an agent edits `.adalab/local_container_1.json` by hand instead, the r
 ]
 ```
 
+### Working with the volume yourself (browsing it, or fixing permissions)
+
+There are **two different "mount" actions**, and mixing them up is the usual source of
+confusion:
+
+| Where | What it does | When you use it |
+| --- | --- | --- |
+| **Volumes page → Mount** | Attaches the volume to **your lab**, so it appears at `~/asv-mnt/…` and you can browse or fix it from a terminal | Inspecting the data, taking a copy, the one-time `chmod` |
+| **App Deployment wizard → Volume mounts** | Attaches the volume to **the deployed app** | Every app you deploy (see above) |
+
+Doing one does not do the other.
+
+To attach it to your lab: open the **burger menu → Volumes**, find **CPDSE Course App Data**,
+and click **Mount**. A *Mount information* dialog appears — for the one-time `chmod`, and for
+browsing, take the defaults:
+
+| Field | Value | Why |
+| --- | --- | --- |
+| **Mount path** | `CPDSE_Course_App_Data` (pre-filled) | This is the **directory name inside your lab**, nothing more. It is pre-filled from the volume name with spaces turned into underscores. Whatever you type here is what you must use in the `chmod` below, so keep the default. |
+| **Mount from root** | **unchecked** | Unchecked puts it at `~/asv-mnt/…` (`/home/<you>/asv-mnt/…`), which is what the commands below assume. Checked would put it at `/asv-mnt/…`. |
+| **Read only** | **unchecked** | Must be unchecked, or the `chmod` — and any repair you came to do — will fail. |
+
+The dialog shows you the result: *Volume will be mounted at
+`/home/<you>/asv-mnt/CPDSE_Course_App_Data`*.
+
+> **This lab mount path is unrelated to the app's mount path.** In your lab the volume is
+> `CPDSE_Course_App_Data`; in a deployed app you mount the same volume at `lab-data`, giving
+> `/asv-mnt/lab-data`. They are two independent settings on the same volume, and they do not
+> need to match.
+
+A newly attached volume can take ~2 minutes to show up in a running lab; wait, or restart the lab.
+
+From there you can browse every app's data:
+
+```bash
+ls ~/asv-mnt/CPDSE_Course_App_Data          # one subdirectory per app
+ls ~/asv-mnt/CPDSE_Course_App_Data/titration-lab
+```
+
+(`lost+found` and `.AVI_SUCCESS` are platform artifacts, not yours — ignore them.)
+
 ### One-time: fix the volume's filesystem permissions
 
-**This has not been done yet** — the volume has never been mounted. Until someone does it,
-every write from every app fails with `PermissionError` while the ACL and the wizard both
-look perfectly healthy.
+A brand-new volume has ACL access but **no filesystem permissions**: the mount succeeds, the
+wizard looks happy, and every write still fails with `PermissionError`.
 
-It only needs doing **once, ever, by one person** (Sune or another volume owner), not by each
-teacher:
+It needs doing **once, ever, by one person** — not by each teacher. With the volume mounted in
+your lab as above, run in a lab terminal:
 
-1. Mount `CPDSE Course App Data` in a lab.
-2. Open a terminal in that lab and run:
+```bash
+cd ~/asv-mnt
+sudo chown root:$NB_GROUP CPDSE_Course_App_Data
+sudo chmod 775 CPDSE_Course_App_Data
+```
 
-   ```bash
-   cd ~/asv-mnt
-   sudo chown root:$NB_GROUP CPDSE_Course_App_Data
-   sudo chmod 775 CPDSE_Course_App_Data
-   ```
+`$NB_GROUP` resolves to `adalab-users` on most installations.
 
-Note the directory name: **spaces in the volume name become underscores**, so
-`CPDSE Course App Data` appears as `CPDSE_Course_App_Data`. Run `ls ~/asv-mnt` if in doubt. A
-newly attached volume can take ~2 minutes to appear in a running lab.
-
-*(AdaLab 1.6 is expected to make this implicit. Your instance already reports 1.6.0 — try a
-deploy first, and only run the chmod if writes fail.)*
+*(AdaLab 1.6 is expected to make this implicit, and this instance already reports 1.6.0 — so
+try a deploy first and only run the chmod if writes fail.)*
 
 ### Deploy
 
