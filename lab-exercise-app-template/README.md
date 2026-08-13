@@ -46,6 +46,10 @@ identically (the *chassis*) and differ only in the exercise-specific parts (the 
 
 ## Stamp an app
 
+> **Working in an AdaLab lab?** Follow **[GETTING-STARTED-ADALAB.md](GETTING-STARTED-ADALAB.md)**
+> instead — a step-by-step walkthrough for the lab terminal, from installing Copier to
+> deploying, with a check after every step. No GitHub account needed; the repo is public.
+
 Copier has no `--directory`/monorepo-subdir flag (that is a cookiecutter feature), so stamp
 by pointing Copier at this template's subdirectory of a clone:
 
@@ -143,7 +147,8 @@ installed**, every plot's "Show the code" **runs standalone** against an exporte
 lab-exercise-app-template/
 ├── copier.yml        # the questions + _subdirectory: template
 ├── SPEC.md           # authoritative spec for working on the template itself
-├── README.md         # this file
+├── README.md                   # this file
+├── GETTING-STARTED-ADALAB.md   # step-by-step for the AdaLab lab terminal
 ├── DECISIONS.md      # decisions taken where the specs were silent/ambiguous
 ├── HANDOVER.md       # build report across the base spec + Addendum A + Addendum B
 └── template/         # the stamped app contents (rendered into the output path)
