@@ -173,6 +173,50 @@ this template depends on — the plugin is internal and is not reproduced here.
   between the two; the Test probe does (see the reversal above). The consistency test now
   enforces the pairing in both directions rather than hard-coding one of them.
 
+## Navigation (fix: Streamlit published the internals as pages)
+
+- **Symptom, reported from a live deployment:** the sidebar offered students `login`,
+  `register`, `session_url` and `components` alongside the real pages, each with its own URL.
+- **Cause:** the UI package was called `pages/`. Streamlit enters magic multipage mode from
+  the directory *name* alone — `PagesManager.uses_pages_directory =
+  Path(main_script_parent / "pages").exists()` — and then publishes every module in it as a
+  page. `app.py`'s docstring claimed deep-linking was impossible because the app does its own
+  navigation; that claim was false for as long as the directory was called `pages/`.
+- **Fix: renamed the package to `ui/`.** This is a deliberate divergence from Addendum B's
+  wording (`pages/` = "thin Streamlit UI"): the addendum's architectural intent is preserved
+  exactly, only the directory name changes, and the name it specifies is reserved by the
+  framework. `tests/test_navigation.py` fails if a `pages/` directory reappears, and
+  `CLAUDE.md` warns agents not to "fix" the name back.
+- **Menu redesign, same report.** A student's menu is now the exercise only — Data capture,
+  Data analysis, FAQ — with "My group" and "Admin" under a collapsed **More** expander.
+  Registration became a forced full-screen step between the course gate and the exercise
+  rather than a nav entry: an unregistered student has no group, so nothing they submitted
+  could be attributed, and after the first visit registration is never needed again. The
+  landing page after registering is Data capture. Rationale: the menu should list what a
+  student does, not how the app is built.
+- **`index=None` on the nav radio** while a secondary page is open, so the sidebar never
+  highlights "Data capture" when the student is actually on Admin.
+
+## Missing import shipped to a deployment (fix: two new guard tests)
+
+- **Symptom:** `NameError: name 'events' is not defined` at `app.py:37`, on every page, on the
+  first real page load. `events.setup_logging()` was added to `_bootstrap()` when the logging
+  framework went in; the import was not.
+- **Why 144 tests missed it:** nothing imported `app.py` (the unit tests exercise `core/`),
+  and the call sits inside a function, so even an import-smoke test would not have caught it.
+- **Fix 1 — `tests/test_imports_and_globals.py`:** imports every module, then disassembles
+  each one and checks that every `LOAD_GLOBAL` resolves against the module namespace plus
+  builtins. `LOAD_GLOBAL` is the precise instrument — attribute names never appear, so there
+  are no false positives from method calls. Verified by reintroducing the bug: it fails with
+  `app looks up names that do not exist: line 37: events`. A test in the same file proves the
+  check itself still detects that pattern, so the guard cannot rot into a no-op.
+- **Fix 2 — `tests/test_app_renders.py`:** runs the real Streamlit script through
+  `streamlit.testing.v1.AppTest` and walks the student's path — gate, registration, each page.
+  It fails on a rendered error-boundary notice as well as on an exception, because `main()`
+  catches page errors and shows a friendly message that would otherwise read as a clean run.
+- **Rationale for both:** the failure was not "a bug in a page" but "no test ever started the
+  app". A static check plus an end-to-end render test close that class, not just this instance.
+
 ## Preview mode (fix: AdaLab Test could never pass)
 
 - **Symptom:** the extension's Test step builds fine, starts the container, and it exits

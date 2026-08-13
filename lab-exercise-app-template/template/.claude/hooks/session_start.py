@@ -10,7 +10,7 @@ import sys
 def main() -> None:
     sys.stdout.write(
         "🛡️  Guardrails are active for this lab-exercise app (Streamlit).\n"
-        "Chassis/seam split: core/ (framework-free — imports streamlit NOWHERE), pages/ and\n"
+        "Chassis/seam split: core/ (framework-free — imports streamlit NOWHERE), ui/ and\n"
         "app.py are CHASSIS and protected by a PreToolUse hook. To change the exercise, edit\n"
         "ONLY the seam:\n"
         "  exercise/schema.py  exercise/capture.py  exercise/analysis.py  exercise/content.md\n"

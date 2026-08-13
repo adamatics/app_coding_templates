@@ -1,7 +1,7 @@
 """CPDSE visual identity — the single source of colour (spec §13). CHASSIS, no streamlit.
 
 This is the ONLY module permitted to contain raw hex. Everything else (the plotly template,
-the Streamlit CSS in pages/_components.py, the reports) reads these constants. Values are
+the Streamlit CSS in ui/_components.py, the reports) reads these constants. Values are
 verbatim from https://cpdse.dk/visual-identity/. Do not invent an error red/amber — the
 palette has none; convey state with words and weight (§13).
 """

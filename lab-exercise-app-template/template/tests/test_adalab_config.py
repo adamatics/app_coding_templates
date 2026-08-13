@@ -21,7 +21,6 @@ import json
 import re
 from pathlib import Path
 
-import pytest
 
 ADALAB = Path(__file__).resolve().parent.parent / ".adalab"
 

@@ -14,7 +14,7 @@ from core import storage
 from core.config import settings
 from core.db import get_session
 from core.errors import CoreError
-from core.models import Group, Member
+from core.models import Member
 
 from . import _components as C
 
@@ -441,7 +441,8 @@ def _log_tab() -> None:
                f"{counts.get('student_registered', 0)} registrations · "
                f"{counts.get('result_submitted', 0)} submissions · "
                f"{counts.get('result_superseded', 0)} corrections · "
-               f"{counts.get('export_generated', 0)} exports")
+               f"{counts.get('export_generated', 0)} exports · "
+               f"{errors} failures")
 
     frame = pd.DataFrame(rows)
     st.dataframe(frame, use_container_width=True, hide_index=True)

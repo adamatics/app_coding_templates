@@ -10,7 +10,6 @@ import defeats the architecture. Two independent proofs:
 from __future__ import annotations
 
 import ast
-import importlib
 import pkgutil
 import subprocess
 import sys

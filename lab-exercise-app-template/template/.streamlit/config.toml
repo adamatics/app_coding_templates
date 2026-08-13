@@ -7,7 +7,7 @@ primaryColor = "#D6C17C"            # Antique Gold (buttons/accents)
 backgroundColor = "#F9F9F9"         # Soft White (never pure #FFFFFF)
 secondaryBackgroundColor = "#F6F1DC" # Ivory Gold Tint (cards, sidebar)
 textColor = "#333333"               # Charcoal
-font = "sans serif"                  # Verdana stack applied via CSS in pages/_components.py
+font = "sans serif"                  # Verdana stack applied via CSS in ui/_components.py
 
 [server]
 headless = true

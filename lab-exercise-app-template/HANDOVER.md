@@ -268,6 +268,44 @@ extension's Test probe, which only the root-serving one survives (see §1).
 Verified: **138 tests**, container builds and serves under its prefix with the logo inside the
 image. Still not verifiable here: an actual deploy on a live tenant.
 
+## 4b. Two defects found by deploying it (and the tests that now catch them)
+
+Both were found by Sune running the app on the CPDSE tenant, not by me. Both were classes of
+gap in the test suite rather than one-off slips, so each is closed with a guard.
+
+### `NameError: name 'events' is not defined` — every page, first load
+
+`_bootstrap()` called `events.setup_logging()`; the import was never added when the logging
+framework went in. **144 tests passed** because nothing imported `app.py` — the unit tests
+exercise `core/` — and the call sits inside a function, so even an import test would have
+missed it.
+
+Closed by two new test files:
+
+* `tests/test_imports_and_globals.py` — imports every module, then disassembles it and checks
+  every `LOAD_GLOBAL` resolves. Verified by reintroducing the bug (fails with
+  `line 37: events`), and it contains a test that the check itself still detects that pattern.
+* `tests/test_app_renders.py` — runs the real script through `streamlit.testing.v1.AppTest`
+  and walks the student's path. It also fails on a rendered error-boundary notice, because
+  `main()` swallows page exceptions into a friendly message that would otherwise look clean.
+
+### Streamlit published the app's internals as pages
+
+Students saw `login`, `register`, `session_url` and `components` in the sidebar, each with a
+URL. Cause: the UI package was called `pages/`, and Streamlit enables magic multipage mode
+from that directory name alone. The package is now `ui/`; `tests/test_navigation.py` fails if
+`pages/` reappears, and `CLAUDE.md` tells agents why not to rename it back.
+
+**This also retires a false claim** in the old `app.py` docstring — that the gate could not be
+bypassed by deep-linking. It could not be bypassed *through this file*, but Streamlit had
+published a second set of URLs that never reached it.
+
+The same report prompted a menu redesign: a student's menu is the exercise only (Data capture,
+Data analysis, FAQ), registration is a forced one-time step between the gate and the exercise,
+and "My group" / "Admin" sit under a collapsed **More**. See `DECISIONS.md`.
+
+**231 tests** now pass from both the nested source and the flattened published layout.
+
 ## 5. Base spec §15 acceptance
 
 ✅ verified · 🟡 partial/by-proxy · ⚪ needs a live AdaLab tenant · ➖ superseded

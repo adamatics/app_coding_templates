@@ -1,33 +1,62 @@
-"""Entry point: gate, navigation, shared chrome (CHASSIS).
+"""Entry point: gate, onboarding, navigation, shared chrome (CHASSIS).
 
-Note on ``pages/``: this app does its own navigation rather than using Streamlit's magic
-multipage auto-discovery, because Addendum B fixes the package layout (``pages/`` holds the
-chassis UI modules, not auto-registered page scripts). Every render goes through here, so the
-course gate and the admin banner cannot be bypassed by deep-linking.
+**Why the UI package is called ``ui/`` and not ``pages/``.** Streamlit turns on magic
+multipage mode purely from the *name* of the directory next to the entry script::
+
+    PagesManager.uses_pages_directory = Path(main_script_parent / "pages").exists()
+
+Every module in such a directory becomes its own page with its own URL, listed in the sidebar.
+When this app's UI package was called ``pages/``, students were shown a second navigation menu
+containing ``login``, ``register``, ``session_url`` and ``components`` — internal modules, not
+screens — and each was reachable by URL outside this file's control. Renaming the package is
+the whole fix; ``tests/test_navigation.py`` fails if a ``pages/`` directory ever comes back.
+
+This app therefore does all its own navigation here. Every render goes through ``main()``, so
+the course gate and the admin banner cannot be bypassed by deep-linking.
+
+**The student's path through the app** is one-way and deliberately narrow:
+
+1. *Course password* (``ui.login``) — the only gate; there are no student passwords (§B2).
+2. *Register* (``ui.register``) — forced, full-screen, no navigation. A student who has not
+   registered has no group, so nothing they submit could be attributed.
+3. *The exercise* — capture, analysis, FAQ. This is where they live for the rest of the course,
+   and where they land on every later visit, because the session token restores steps 1 and 2.
+
+Registration and the admin console are one click away under "More" rather than sitting in the
+main list: after the first visit, neither is part of doing the exercise.
 """
 from __future__ import annotations
 
 import streamlit as st
 
-from core import admin as core_admin, sessions, theme
+from core import admin as core_admin, events, sessions, theme
 from core.config import settings
 from core.db import StorageError, get_session, init_db
 from core.seed_demo import seed_demo_data
-from pages import _components as C
-from pages import admin_page, analysis, capture, faq, login, register
-from pages.session_url import (
+from ui import _components as C
+from ui import admin_page, analysis, capture, faq, login, register
+from ui.session_url import (
     clear_session_token,
     read_session_token,
     remember_session_token,
 )
 
-PAGES = {
-    "Register / My group": register.render,
+# The exercise itself — the only three entries a student sees in the main menu.
+EXERCISE_PAGES = {
     "Data capture": capture.render,
     "Data analysis": analysis.render,
     "FAQ": faq.render,
+}
+
+# Needed once (registration) or by teachers only (admin). Kept out of the main menu so the
+# student's list is the work, not the plumbing — reachable under "More" in the sidebar.
+SECONDARY_PAGES = {
+    "My group": register.render,
     "Admin": admin_page.render,
 }
+
+PAGES = {**EXERCISE_PAGES, **SECONDARY_PAGES}
+LANDING_PAGE = next(iter(EXERCISE_PAGES))
 
 
 @st.cache_resource
@@ -116,39 +145,84 @@ def main() -> None:
     C.header(settings.exercise_title, settings.course_code)
     C.banner(banner_text)
 
+    ctx = register.current_context()
+
+    # Step 2 of onboarding. Registration is a one-time step, so it is shown on its own with no
+    # navigation to wander off into: an unregistered student has no group, and nothing they
+    # entered could be attributed to anyone. `register.render()` reruns once it succeeds, and
+    # the next pass lands on the exercise below.
+    if ctx is None:
+        with st.sidebar:
+            _sidebar_identity(None)
+            _leave_course_button()
+        _render_page("My group", None)
+        C.footer(settings.institution_name, settings.contact_email)
+        return
+
+    page = st.session_state.get("page") or LANDING_PAGE
+    if page not in PAGES:                       # stale state from an older version
+        page = LANDING_PAGE
+
     with st.sidebar:
         st.markdown(f"**{settings.exercise_title}**")
         st.caption(settings.course_code)
-        choice = st.radio("Go to", list(PAGES), label_visibility="collapsed")
-        st.markdown("---")
-        ctx = register.current_context()
-        if ctx:
-            st.caption(f"{ctx['display_name']} · {ctx['group']} · hold {ctx['hold']} · {ctx['year']}")
-        else:
-            st.caption("Not registered yet")
-        if st.button("Leave course"):
-            token = st.session_state.get("session_token")
-            if token:
-                with get_session() as session:
-                    sessions.revoke(session, token)
-            clear_session_token()
-            st.session_state.clear()
-            st.rerun()
 
-    # Error boundary: an unexpected failure in any page is logged with its traceback and
-    # shown as a plain message, rather than a raw Streamlit stack trace (or, with
-    # showErrorDetails off, a blank panel that tells nobody anything).
+        # index=None leaves the radio unselected while a secondary page is open, so the
+        # sidebar never claims the student is on "Data capture" when they are not.
+        options = list(EXERCISE_PAGES)
+        chosen = st.radio("Go to", options, label_visibility="collapsed",
+                          index=options.index(page) if page in EXERCISE_PAGES else None)
+        if chosen is not None and chosen != page:
+            page = st.session_state["page"] = chosen
+
+        with st.expander("More", expanded=page in SECONDARY_PAGES):
+            for label in SECONDARY_PAGES:
+                if st.button(label, use_container_width=True, key=f"nav_{label}"):
+                    st.session_state["page"] = label
+                    st.rerun()
+
+        st.markdown("---")
+        _sidebar_identity(ctx)
+        _leave_course_button()
+
+    _render_page(page, ctx)
+    C.footer(settings.institution_name, settings.contact_email)
+
+
+def _sidebar_identity(ctx) -> None:
+    if ctx:
+        st.caption(f"{ctx['display_name']} · {ctx['group']} · hold {ctx['hold']} · {ctx['year']}")
+    else:
+        st.caption("Step 2 of 2 — register to start")
+
+
+def _leave_course_button() -> None:
+    if st.button("Leave course"):
+        token = st.session_state.get("session_token")
+        if token:
+            with get_session() as session:
+                sessions.revoke(session, token)
+        clear_session_token()
+        st.session_state.clear()
+        st.rerun()
+
+
+def _render_page(page: str, ctx) -> None:
+    """Render one page inside an error boundary.
+
+    An unexpected failure is logged with its traceback and shown as a plain message, rather
+    than a raw Streamlit stack trace (or, with showErrorDetails off, a blank panel that tells
+    nobody anything).
+    """
     try:
-        PAGES[choice]()
+        PAGES[page]()
     except Exception as exc:
         C.notice("<b>Sorry — something went wrong on this page.</b><br>"
                  "Your saved data is safe. Please try again, and tell your instructor if it "
                  "keeps happening.", "err")
         with get_session() as session:
             events.log_error(session, "page_failed", exc, context=ctx or {},
-                             detail={"page": choice})
-
-    C.footer(settings.institution_name, settings.contact_email)
+                             detail={"page": page})
 
 
 if __name__ == "__main__":

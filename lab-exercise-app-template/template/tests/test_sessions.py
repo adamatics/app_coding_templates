@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from core import cohorts, identity, sessions
+from core import cohorts, sessions
 from core.models import SessionToken
 from tests.conftest import SECOND_YEAR, register_student
 

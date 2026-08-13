@@ -5,7 +5,7 @@ import io
 
 import pandas as pd
 
-from core import analysis, cohorts, export, identity, plots
+from core import analysis, cohorts, export, plots
 from core import results as R
 from tests.conftest import DEFAULT_YEAR, SECOND_YEAR, register_student, valid_measurement
 

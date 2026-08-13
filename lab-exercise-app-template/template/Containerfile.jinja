@@ -39,7 +39,7 @@ COPY pyproject.toml ./
 RUN uv pip install --system --no-cache -r pyproject.toml
 
 COPY core/ ./core/
-COPY pages/ ./pages/
+COPY ui/ ./ui/
 COPY exercise/ ./exercise/
 COPY assets/ ./assets/
 COPY .streamlit/ ./.streamlit/

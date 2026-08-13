@@ -9,7 +9,7 @@ import hmac
 import re
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 

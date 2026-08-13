@@ -27,9 +27,14 @@ def current_context():
 
 
 def render() -> None:
-    st.header("Register / My group")
+    """Onboarding step 2 when nobody is registered yet, "my group" afterwards.
 
+    The same screen serves both, but the heading says which one the student is looking at:
+    on the first visit this is a task to finish, later it is a record to check or change.
+    """
     ctx = current_context()
+    st.header("My group" if ctx else "Register")
+
     if ctx:
         C.notice(f"You're registered as <b>{ctx['display_name']}</b> (KUID {ctx['kuid']}) in "
                  f"group <b>{ctx['group']}</b>, hold {ctx['hold']}, {ctx['year']}.", "ok")

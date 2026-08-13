@@ -2,10 +2,14 @@
 
 ```
 core/       framework-free Python — imports streamlit NOWHERE
-pages/      thin Streamlit chassis UI
+ui/         thin Streamlit chassis UI
 exercise/   THE SEAM (Python; may use streamlit)
-app.py      entry point, course gate, navigation
+app.py      entry point, course gate, onboarding, navigation
 ```
+
+The UI package is `ui/`, never `pages/`: a directory called `pages/` beside `app.py` puts
+Streamlit into magic multipage mode, turning every module in it into a URL-addressable page
+outside the course gate. `tests/test_navigation.py` enforces the name.
 
 ## The seam (edit these)
 
@@ -18,10 +22,10 @@ app.py      entry point, course gate, navigation
 
 ## The chassis (do NOT edit — the guard blocks these)
 
-`core/**`, `pages/**`, `app.py`, `.adalab/{app,project,card}.json`, `.vscode/**`,
+`core/**`, `ui/**`, `app.py`, `.adalab/{app,project,card}.json`, `.vscode/**`,
 `Containerfile`, lockfiles, `.claude/settings.json`, `.claude/hooks/**`.
 
-**Editable with confirmation:** `.adalab/local_container_demo.json`, `pyproject.toml`,
+**Editable with confirmation:** `.adalab/local_container_1.json`, `pyproject.toml`,
 `.streamlit/config.toml`, dependency-add commands.
 
 ## You want X → edit Y

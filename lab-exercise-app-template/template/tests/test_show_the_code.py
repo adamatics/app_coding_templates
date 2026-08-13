@@ -10,7 +10,6 @@ import ast
 import subprocess
 import sys
 
-import pytest
 
 from core import analysis, export, plots
 from core import results as R

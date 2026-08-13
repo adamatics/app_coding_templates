@@ -15,7 +15,7 @@ def _actions(session) -> list[str]:
 
 # --- the events the instructor asked for -----------------------------------
 def test_registration_is_logged_with_datetime_and_identity(session):
-    m = register_student(session, "abc123", "Ana", 1, "G1")
+    register_student(session, "abc123", "Ana", 1, "G1")
     rows = [e for e in events.recent(session) if e["action"] == "student_registered"]
     assert len(rows) == 1
     row = rows[0]

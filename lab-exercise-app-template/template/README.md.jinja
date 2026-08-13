@@ -29,14 +29,22 @@ class and with previous years, and export a report they keep.
 
 For students:
 
-- Open the app, enter the course password, then register with your KUID (three letters and
-  three digits), your name and your hold, and join or create your group.
-- Go to **Data capture** to record measurements, and **Data analysis** to compare, answer the
-  questions, and download your report. You can come back weeks later while writing it.
+- **First visit, two steps.** Enter the course password, then register with your KUID (three
+  letters and three digits), your name and your hold, and join or create your group. There is
+  no menu until you have registered — until then there is only one thing to do, and nothing
+  you entered could be attributed to a group anyway.
+- **After that, the exercise.** You land on **Data capture** to record measurements, with
+  **Data analysis** to compare, answer the questions and download your report, and **FAQ**
+  for the instructions. Those three are the whole menu.
+- A later visit skips both steps: the session in your browser URL restores the password *and*
+  your identity, so you come back weeks later straight into the exercise while writing up.
+- **My group** (to check or change your group) and **Admin** are tucked under **More** in the
+  sidebar, because neither is part of doing the exercise.
 
 For the instructor / admin:
 
-- Open **Admin** and sign in with the admin password (`ADMIN_PASSWORD` at deploy time). Each
+- Open **More → Admin** in the sidebar and sign in with the admin password (`ADMIN_PASSWORD`
+  at deploy time). Each
   section of the Admin page explains itself in the app; in short:
   - **Course name and instructor** — shown on the FAQ page and on every exported report, so a
     student who finds a PDF months later knows where it came from.
@@ -98,8 +106,9 @@ Then open http://localhost:8000/
 - Reports: reportlab (PDF) and plotly (HTML); Excel via openpyxl.
 - Single process, single container, port 8000. No Node, no separate API.
 - Architecture: `core/` is framework-free Python and imports Streamlit nowhere (a test
-  enforces it), `pages/` is the thin Streamlit UI, `exercise/` is the per-app seam, `app.py`
-  is the entry point.
+  enforces it), `ui/` is the thin Streamlit UI, `exercise/` is the per-app seam, `app.py`
+  is the entry point. The UI package is deliberately **not** called `pages/` — that name puts
+  Streamlit into magic multipage mode and publishes every internal module as its own URL.
 - Visual identity: the fixed CPDSE palette and Verdana typography, defined once in
   `core/theme.py` and applied to both the UI and every plot.
 

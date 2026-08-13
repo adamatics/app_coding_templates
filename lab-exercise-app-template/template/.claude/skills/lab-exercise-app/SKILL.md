@@ -66,4 +66,4 @@ which is a teaching requirement (§B7), and the test suite checks the code runs 
 - Do not add a way to edit or delete results. Corrections **supersede**; resets **close a
   year**. Nothing is ever destroyed.
 - Do not use `st.error`/`st.success`/`st.warning` (off-palette) or hard-code hex colours;
-  use `pages._components.notice` and `core.theme`.
+  use `ui._components.notice` and `core.theme`.

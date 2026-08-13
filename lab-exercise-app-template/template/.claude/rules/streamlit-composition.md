@@ -1,13 +1,13 @@
 ---
 paths:
   - "exercise/**"
-  - "pages/**"
+  - "ui/**"
   - "app.py"
 ---
 
 # Exercise pages compose chassis components
 
-Exercise pages **compose chassis components from `core/` and `pages/_components.py` rather
+Exercise pages **compose chassis components from `core/` and `ui/_components.py` rather
 than styling from scratch**, so the CPDSE identity holds across every app in the family
 (Addendum B §B9).
 
@@ -16,7 +16,7 @@ than styling from scratch**, so the CPDSE identity holds across every app in the
 - Build plots with **`core.plots`** helpers (`scatter`, `line`, `histogram`, `box`, `bar`).
   They return `(figure, code_str)`; the chassis renders `code_str` in the "Show the code"
   panel. This is a teaching requirement — a hand-built figure silently loses it.
-- Use **`pages._components`** for chrome: `notice(text, tone)` for messages,
+- Use **`ui._components`** for chrome: `notice(text, tone)` for messages,
   `show_the_code(fig, code)` for plots, `header`/`banner`/`footer` for layout.
 - Keep colours in **`core.theme`** (the only module with hex). The plotly template and the
   CSS both read it.
