@@ -52,6 +52,13 @@ def require_writable_data_dir() -> None:
     """Verify the shared-volume mount exists and is writable. NEVER create DATA_DIR itself;
     only create this app's subdirectory inside the mounted volume."""
     data_dir = settings.data_dir
+    if settings.preview_mode:
+        # Storage was relocated to scratch space at import because nothing can be
+        # collected without a course password (see core/config.py). Still create the
+        # per-app subdirectories so the app runs.
+        settings.app_data_dir.mkdir(parents=True, exist_ok=True)
+        settings.exports_dir.mkdir(parents=True, exist_ok=True)
+        return
     hint = (
         f"Mount the AdaLab Shared Volume at {data_dir} (Fast Mount ON) and chmod it once "
         f"(see README). e.g. locally: docker run -v ./lab-data:{data_dir} ..."

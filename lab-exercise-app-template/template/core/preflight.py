@@ -38,6 +38,18 @@ def main() -> int:
 
     from .db import SessionLocal
 
+    if settings.preview_mode:
+        sys.stderr.write(
+            "\n=== PREVIEW MODE — NOT FOR STUDENTS ===\n"
+            f"No volume is mounted at the configured DATA_DIR, so the app is running on\n"
+            f"scratch space at {settings.data_dir}. Anything written here is LOST when the\n"
+            "container stops.\n"
+            "This is allowed only because COURSE_PASSWORD is unset, so no student can sign\n"
+            "in and nothing can be collected. Set COURSE_PASSWORD and mount the Shared\n"
+            "Volume before using this with a class — the app will then refuse to start\n"
+            "without the volume.\n\n"
+        )
+
     if settings.demo_mode:
         with SessionLocal() as session:
             created = seed_demo_data(session)

@@ -100,3 +100,51 @@ def test_preflight_succeeds_on_a_mounted_volume(tmp_path):
                           text=True, env=env, cwd=str(Path(db.__file__).parent.parent))
     assert proc.returncode == 0, proc.stderr
     assert "storage OK" in proc.stdout
+
+
+# --- preview mode: how AdaLab's Test step can run with no volume -------------
+def _preflight(env_overrides, tmp_path_factory=None):
+    """Run `python -m core.preflight` in a subprocess with the given environment."""
+    import subprocess
+    import sys
+    from pathlib import Path as _P
+
+    env = dict(os.environ)
+    env.update(env_overrides)
+    return subprocess.run([sys.executable, "-m", "core.preflight"], capture_output=True,
+                          text=True, env=env, cwd=str(_P(db.__file__).parent.parent))
+
+
+def test_no_volume_and_no_course_password_starts_in_preview_mode(tmp_path):
+    """AdaLab's Test step runs the container with no volume and no env vars. Without a
+    course password nothing can be collected, so the app must still start."""
+    proc = _preflight({
+        "DATA_DIR": str(tmp_path / "never-mounted"),
+        "COURSE_PASSWORD": "",
+        "ADMIN_PASSWORD": "",
+        "DEMO_MODE": "false",
+    })
+    assert proc.returncode == 0, f"Test step must be able to start the app:\n{proc.stderr}"
+    assert "PREVIEW MODE" in proc.stderr          # and it says so, loudly
+    assert "storage OK" in proc.stdout
+
+
+def test_no_volume_WITH_course_password_still_fails_loud(tmp_path):
+    """The dangerous case is unchanged: a real deployment that forgets the volume."""
+    proc = _preflight({
+        "DATA_DIR": str(tmp_path / "never-mounted"),
+        "COURSE_PASSWORD": "lab2026",
+        "ADMIN_PASSWORD": "admin",
+    })
+    assert proc.returncode != 0, "a course that can collect data must require a real volume"
+    assert "STARTUP ABORTED" in proc.stderr
+    assert "never-mounted" in proc.stderr
+
+
+def test_preview_mode_is_off_when_the_volume_exists(tmp_path):
+    proc = _preflight({
+        "DATA_DIR": str(tmp_path),          # exists and is writable
+        "COURSE_PASSWORD": "",
+    })
+    assert proc.returncode == 0
+    assert "PREVIEW MODE" not in proc.stderr
