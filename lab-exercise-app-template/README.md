@@ -70,7 +70,53 @@ AdaLab's default `stripped_prefix: true`. Streamlit emits relative asset URLs, s
 resolves correctly under `/apps/<slug>/` once the proxy strips the prefix — and the container
 still answers `/`, which the extension's Test step requires. See `HANDOVER.md` §B1.
 
+## Designing the UI: the live preview loop
+
+`copier → build → test` is the **release gate**, not the edit loop. Running it after every
+layout tweak costs minutes and still cannot show you how a page *looks* — the container proves
+the app starts, and the tests prove the widgets exist, but neither shows spacing, colour, or a
+chart crowding its caption.
+
+For design work, run the template directly:
+
+```bash
+python3 scripts/dev.py
+```
+
+Then edit `template/{{project_slug}}/ui/**`, `exercise/**` or `core/theme.py` and **save** —
+the page reruns in the browser. Seconds, not minutes, and you are editing the template itself
+rather than a copy you would have to port changes back from.
+
+**How it works.** Copier renders only files ending in `.jinja`. Exactly one Python file in the
+whole template is templated (`core/config.py.jinja`) and nothing under `ui/` is — so `dev.py`
+stamps once into `.devapp/`, then replaces every plain file with a **symlink back to the
+template**. Streamlit resolves the symlink, watches the real file, and reruns on save.
+
+| | |
+| --- | --- |
+| Sign in with | course password `dev`, admin password `dev` |
+| Demo data | seeded by default, so charts and tables have content — empty screens hide most layout problems |
+| `--empty` | start with no data, to inspect the first-run state deliberately |
+| `--port N` | default 8501 |
+| `--rebuild` | re-render the `.jinja` files (done automatically when one changes) |
+
+`.devapp/` and `.devdata/` are working directories, both git-ignored. Delete `.devdata/` to
+start a fresh cohort.
+
+**What it does not cover.** The dev loop uses your local Python, not the container, and serves
+at the root without a proxy. So before you commit, still run the gate — the tests and a
+container build — which is what catches dependency, prefix and packaging problems:
+
+```bash
+copier copy . /tmp/check --defaults --trust -d project_slug=check-lab && cd /tmp/check/check-lab && python3 -m pytest -q
+```
+
 ## Before an app can run: the Shared Volume
+
+> **Just trying it out?** Set `STORAGE_MODE=local` and the app writes to an ordinary
+> directory instead, creating it if needed — no volume, no mount, no `chmod`. Data then lives
+> on the container's own disk and is **erased by every redeploy or restart**, so the app says
+> so on every screen and pushes you to export. See *Local disk instead of a volume* below.
 
 Stamping and deploying is not enough — **every app needs an AdaLab Shared Volume (ASV), and
 the volume is created separately from the app.** This is the step that is not part of the VS
@@ -109,6 +155,40 @@ subdirectory), which is how a student's history stays reachable across a course.
 
 The stamped app carries the full runbook in its own README, and agents working in the app get
 it from `.claude/skills/lab-exercise-app/references/adalab-deployment.md`.
+
+### Local disk instead of a volume
+
+`STORAGE_MODE=local` writes results to `DATA_DIR` as an ordinary directory, creating it if it
+does not exist:
+
+```bash
+podman run -p 8000:8000 -e STORAGE_MODE=local \
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me <project_slug>
+```
+
+In AdaLab, set `STORAGE_MODE=local` in the deploy wizard's environment variables and leave
+**Volume mounts** empty.
+
+**What you give up.** Container-local data is erased whenever the container is replaced — every
+redeploy, every restart of a stopped app, every resource change. So it is right for a laptop, a
+lab, a demo, or a first trial before anyone has provisioned a volume, and wrong for a class
+whose results matter unless you export after every session.
+
+The app does not let this pass quietly:
+
+- a standing notice on **every screen**, including the sign-in page
+- a warning block at startup in the container log
+- a notice on **Admin → Export** saying the download is the only lasting copy
+- `storage_mode` and `storage_is_durable` recorded in the `app_started` event
+
+**It is never reached by accident.** Without `STORAGE_MODE=local`, a missing volume still
+aborts startup — that is the guard that stops a forgotten mount silently writing a year of
+results into a container that the next redeploy throws away. The abort message names this
+escape hatch, so nobody has to guess. `tests/test_storage.py` pins all of it, including that
+local mode *still* fails loud when the directory it was pointed at cannot be written.
+
+To move to a volume later: mount the ASV, unset `STORAGE_MODE`, and copy your last export in
+via the Admin page (or drop the SQLite file into the volume's `<app-slug>/` subdirectory).
 
 ## Customising the exercise (the seam)
 

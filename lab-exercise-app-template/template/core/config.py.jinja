@@ -57,6 +57,14 @@ class Settings:
     # the app runs on scratch space so AdaLab's Test step can start it. Never true
     # for a deployment that can actually collect data. See _resolve_storage below.
     preview_mode: bool = False
+    # "volume" (default) requires a mounted AdaLab Shared Volume and refuses to start
+    # without one. "local" writes to DATA_DIR as an ordinary directory, creating it if
+    # needed — for running on a laptop or in a lab, or for a short trial where nobody has
+    # set up a volume yet. It is opt-in because container-local data is erased by every
+    # redeploy; the app says so on every screen and the admin page pushes you to export.
+    storage_mode: str = field(
+        default_factory=lambda: os.environ.get("STORAGE_MODE", "volume").strip().lower()
+    )
     # Streamlit --server.baseUrlPath. Empty by default: the app serves at the container root
     # and AdaLab strips the /apps/<app_url> prefix before forwarding. Set this (and flip
     # stripped_prefix to false) only if your platform forwards the prefix intact.
@@ -92,6 +100,21 @@ class Settings:
     def gate_enabled(self) -> bool:
         """The course gate can admit students only when a course password is configured."""
         return bool(self.course_password)
+
+    @property
+    def local_storage(self) -> bool:
+        """Writing to an ordinary directory instead of a mounted Shared Volume (STORAGE_MODE)."""
+        return self.storage_mode == "local"
+
+    @property
+    def storage_is_durable(self) -> bool:
+        """Whether data written here survives a redeploy.
+
+        Only a mounted Shared Volume does. Local mode keeps data until the container is
+        replaced; preview mode keeps it until the process stops. Both warn on every screen,
+        and neither should be used for a cohort whose results matter without an export plan.
+        """
+        return not (self.local_storage or self.preview_mode)
 
 
 settings = Settings()
@@ -130,6 +153,16 @@ def _storage_is_usable(path: Path) -> bool:
 
 def _resolve_storage() -> None:
     configured = settings.data_dir
+    if settings.local_storage:
+        # Opt-in local disk: DATA_DIR is an ordinary directory, so create it rather than
+        # treating "missing" as "the volume was forgotten". If it cannot be created, fall
+        # through and let preflight fail loud — silently writing somewhere else is the one
+        # outcome this app never allows.
+        try:
+            configured.mkdir(parents=True, exist_ok=True)
+        except OSError:              # pragma: no cover - unwritable parent
+            pass
+        return
     if _storage_is_usable(configured):
         return                       # normal case: the volume is there
     if settings.gate_enabled:

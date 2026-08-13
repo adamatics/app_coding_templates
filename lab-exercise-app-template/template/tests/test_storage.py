@@ -198,3 +198,90 @@ def test_write_probe_is_unique_per_app(tmp_path):
     (other / f".write-probe-someone-else-999").write_text("held by another app")
     assert config_mod._storage_is_usable(other) is True          # unaffected
     assert (other / ".write-probe-someone-else-999").exists()    # and left alone
+
+
+# --- STORAGE_MODE=local: running without a Shared Volume, on purpose ---------
+#
+# The default refuses to start without a mounted volume, because a forgotten mount silently
+# writes a year of results into a container that the next redeploy throws away. `local` is the
+# opt-in escape from that rule — for a laptop, a lab, or a trial nobody has provisioned a
+# volume for. These tests pin the three properties that keep it safe: it is never reached by
+# accident, it is never mistaken for durable storage, and it still fails loud if the directory
+# it was pointed at cannot be written.
+def test_local_mode_creates_the_directory_and_starts(tmp_path):
+    """The whole point: no mount, no volume, and the app comes up anyway."""
+    target = tmp_path / "not-a-mount" / "lab-data"
+    proc = _preflight({
+        "DATA_DIR": str(target),
+        "STORAGE_MODE": "local",
+        "COURSE_PASSWORD": "course-secret",     # a real gate — students CAN sign in
+        "ADMIN_PASSWORD": "admin-secret",
+        "DEMO_MODE": "false",
+    })
+    assert proc.returncode == 0, f"local mode should start without a volume:\n{proc.stderr}"
+    assert target.is_dir(), "local mode should create DATA_DIR rather than demand a mount"
+    assert "storage OK" in proc.stdout
+
+
+def test_local_mode_says_the_data_is_not_durable(tmp_path):
+    """A teacher must not be able to run a class on local disk without being told."""
+    proc = _preflight({
+        "DATA_DIR": str(tmp_path / "local-store"),
+        "STORAGE_MODE": "local",
+        "COURSE_PASSWORD": "course-secret",
+        "DEMO_MODE": "false",
+    })
+    assert "LOCAL DISK STORAGE" in proc.stderr
+    assert "ERASED" in proc.stderr, "the warning must say what actually happens on redeploy"
+    assert "export" in proc.stderr.lower(), "and what to do about it"
+
+
+def test_local_mode_is_off_unless_asked_for(tmp_path):
+    """A missing volume must never silently degrade into local storage.
+
+    This is the property the whole fail-loud design rests on, so it is tested from the
+    outside: same environment as the working case above, minus STORAGE_MODE.
+    """
+    proc = _preflight({
+        "DATA_DIR": str(tmp_path / "not-a-mount" / "lab-data"),
+        "COURSE_PASSWORD": "course-secret",
+        "DEMO_MODE": "false",
+    })
+    assert proc.returncode != 0, "without STORAGE_MODE=local a missing volume must abort"
+    assert "STARTUP ABORTED" in proc.stderr
+    assert "STORAGE_MODE=local" in proc.stderr, \
+        "the failure should name the deliberate escape hatch, so nobody has to guess"
+
+
+def test_local_mode_still_fails_loud_on_an_unwritable_directory(tmp_path):
+    """Opting out of the volume is not opting out of storage working at all."""
+    blocked = tmp_path / "blocked"
+    blocked.mkdir()
+    blocked.chmod(0o500)                        # readable, not writable
+    try:
+        proc = _preflight({
+            "DATA_DIR": str(blocked / "lab-data"),
+            "STORAGE_MODE": "local",
+            "COURSE_PASSWORD": "course-secret",
+            "DEMO_MODE": "false",
+        })
+        assert proc.returncode != 0, "an unwritable local directory must still abort"
+        assert "STARTUP ABORTED" in proc.stderr
+    finally:
+        blocked.chmod(0o700)                    # so pytest can clean up
+
+
+def test_durability_flag_matches_the_mode(tmp_path):
+    """`storage_is_durable` is what the UI and the event log key off, so pin its meaning."""
+    from core.config import settings as live
+
+    original = live.storage_mode
+    try:
+        object.__setattr__(live, "storage_mode", "volume")
+        assert live.storage_is_durable is True
+        object.__setattr__(live, "storage_mode", "local")
+        assert live.local_storage is True
+        assert live.storage_is_durable is False, \
+            "local disk is not durable — the banner and the export warning depend on this"
+    finally:
+        object.__setattr__(live, "storage_mode", original)

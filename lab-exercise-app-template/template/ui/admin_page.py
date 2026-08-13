@@ -345,6 +345,11 @@ def _groups_tab() -> None:
 
 def _export_tab() -> None:
     st.subheader("Export")
+    if not settings.storage_is_durable:
+        C.notice(
+            "<b>This app is not writing to a Shared Volume, so an export is the only lasting "
+            "copy.</b> Download the database below at the end of every session — a redeploy "
+            "or restart erases everything stored in the app.", "err")
     st.caption("Columns are the schema fields plus year/hold/group/kuid/submitted_at/superseded, "
                "so exports from different years line up directly.")
     with get_session() as session:

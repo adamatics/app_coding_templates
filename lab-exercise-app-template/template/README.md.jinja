@@ -185,6 +185,28 @@ The two configurations must never be mixed. If a platform ever forwards the pref
 set `BASE_URL_PATH` to that prefix **and** flip `stripped_prefix` to `false` — a test checks
 the two stay consistent.
 
+### Local disk instead of a volume
+
+`STORAGE_MODE=local` writes results to `DATA_DIR` as an ordinary directory, creating it if
+needed — no volume, no mount, no one-time `chmod`:
+
+```bash
+podman run -p 8000:8000 -e STORAGE_MODE=local \
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
+```
+
+In AdaLab: set `STORAGE_MODE=local` in the deploy wizard's environment variables and leave
+**Volume mounts** empty.
+
+Right for a laptop, a lab, a demo, or a first trial. **Container-local data is erased whenever
+the container is replaced** — every redeploy, every restart, every resource change — so the app
+warns on every screen, at startup, and on the Export tab, and records `storage_mode` in the
+`app_started` event. If you run a real session this way, export from **More → Admin**
+afterwards: that download is the only copy.
+
+Without this variable a missing volume still aborts startup. That guard is the reason a
+forgotten mount cannot quietly cost a year of results.
+
 ### Persistent storage: the Shared Volume (do this before the first class)
 
 Container filesystems are wiped on every redeploy — an **AdaLab Shared Volume (ASV)** is the

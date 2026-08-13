@@ -129,6 +129,14 @@ def main() -> None:
             "anything entered here is lost when the app stops. Set "
             "<code>COURSE_PASSWORD</code> and mount the Shared Volume before using this "
             "with a class.", "err")
+    elif settings.local_storage:
+        # Deliberate (STORAGE_MODE=local), so this is a standing caution rather than a
+        # fault — but it is on every screen, because "the results are gone" is discovered
+        # far too late otherwise.
+        C.notice(
+            "<b>Results are stored on local disk, not a Shared Volume.</b> They are erased "
+            "whenever this app is redeployed or restarted. Download an export from "
+            "<b>More → Admin</b> after each session — it is the only copy.", "err")
 
     # Course gate (§B2) — everything below requires it.
     if not st.session_state.get("gate_ok"):
