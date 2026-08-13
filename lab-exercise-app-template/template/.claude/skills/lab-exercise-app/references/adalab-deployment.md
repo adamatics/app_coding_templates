@@ -94,7 +94,19 @@ sudo chown root:$NB_GROUP <Volume_Name>
 sudo chmod 775 <Volume_Name>
 ```
 
-`$NB_GROUP` is `adalab-users` on most installations. **`<Volume_Name>` is the volume's name
+`$NB_GROUP` is `adalab-users` on most installations.
+
+**Do not misread the output.** `sudo: unable to send audit message: Operation not permitted`
+is sudo failing to reach the audit log inside a container — the command still runs. And a
+subsequent bare `chmod` returning `Operation not permitted` means the `chown` *succeeded*
+(root owns it now). Diagnose from the result, not the noise:
+
+```bash
+ls -ld ~/asv-mnt/<Volume_Name>    # want: drwxrwsr-x root adalab-users
+```
+
+Group must be `adalab-users` (or whatever `$NB_GROUP` holds) with group write. If it shows
+`root root`, `$NB_GROUP` was empty — re-run naming the group explicitly. **`<Volume_Name>` is the volume's name
 with spaces replaced by underscores** — `CPDSE Lab Data` → `CPDSE_Lab_Data`; tell the user to
 `ls ~/asv-mnt` rather than guess. A lab set to "Mount from Root" sees `/asv-mnt/...` instead.
 A newly attached volume can take ~2 minutes to appear in a running lab.

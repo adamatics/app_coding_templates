@@ -224,6 +224,10 @@ sudo chmod 775 <Volume_Name>
 
 `$NB_GROUP` resolves to `adalab-users` on most installations.
 
+`sudo: unable to send audit message` is harmless container noise — the command still runs.
+Check the result rather than the warnings: `ls -ld ~/asv-mnt/<Volume_Name>` should show group
+`adalab-users` with group write (`drwxrwsr-x root adalab-users`).
+
 **`<Volume_Name>` is the volume's name with spaces replaced by underscores** — a volume called
 `CPDSE Lab Data` appears as `~/asv-mnt/CPDSE_Lab_Data`. `ls ~/asv-mnt` to see the real name.
 (If your lab is set to "Mount from Root" the path is `/asv-mnt/...` instead of `~/asv-mnt/...`.)

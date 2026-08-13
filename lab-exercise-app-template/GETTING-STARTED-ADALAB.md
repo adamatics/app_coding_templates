@@ -279,6 +279,35 @@ sudo chmod 775 CPDSE_Course_App_Data
 
 `$NB_GROUP` resolves to `adalab-users` on most installations.
 
+**Ignore `sudo: unable to send audit message: Operation not permitted`.** It appears twice and
+looks like a failure, but it is only sudo complaining that it cannot reach the audit log inside
+a container — the command itself runs. Likewise, if you then try `chmod` *without* `sudo` and
+get `Operation not permitted`, that is expected: root now owns the directory, which means the
+`chown` worked.
+
+Confirm it took:
+
+```bash
+ls -ld ~/asv-mnt/CPDSE_Course_App_Data
+touch ~/asv-mnt/CPDSE_Course_App_Data/.probe && rm ~/asv-mnt/CPDSE_Course_App_Data/.probe && echo WRITABLE
+```
+
+You want to see the group **`adalab-users`** with group write, e.g.:
+
+```
+drwxrwsr-x 2 root adalab-users 4096 ... CPDSE_Course_App_Data
+      ^^^ group rwx (the s is setgid — new files inherit the group, which is what you want
+          on a volume shared by several apps)
+```
+
+If the group shows as `root` rather than `adalab-users`, `$NB_GROUP` was empty when you ran
+the command. Name the group explicitly and re-run:
+
+```bash
+sudo chown root:adalab-users ~/asv-mnt/CPDSE_Course_App_Data
+sudo chmod 775 ~/asv-mnt/CPDSE_Course_App_Data
+```
+
 *(AdaLab 1.6 is expected to make this implicit, and this instance already reports 1.6.0 — so
 try a deploy first and only run the chmod if writes fail.)*
 
