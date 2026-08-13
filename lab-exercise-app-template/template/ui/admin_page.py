@@ -75,6 +75,41 @@ def _course_tab() -> None:
     st.caption("Everything on this tab is visible to students immediately after you save. "
                "Nothing here touches their data.")
 
+    # Everything below is one FORM, and that is load-bearing rather than cosmetic. A bare
+    # st.text_input only sends its value to the server when it loses focus or the user presses
+    # Enter — so typing a name and clicking Save straight away can save the PREVIOUS value,
+    # and the click that finally commits the text often does not register as a button press.
+    # The symptom is "I typed it, I clicked Save, nothing happened".
+    #
+    # Inside a form, every widget's current value is submitted together with the button, in
+    # one round trip. That is why the sign-in screens have always been reliable — they were
+    # forms from the start — and this tab was not.
+    with st.form("course_settings"):
+        values = _course_settings_fields(current)
+        saved = st.form_submit_button("Save course settings", type="primary")
+
+    if saved:
+        # Only on submit. The form body re-runs on every render to draw the widgets, so
+        # writing there would rewrite the settings on every click anywhere in the app.
+        with get_session() as session:
+            for key, value in values.items():
+                core_admin.set_setting(session, key, value)
+        C.notice("Saved. Students see the change on their next click.", "ok")
+
+    # The FAQ preview lives OUTSIDE the form on purpose: inside one, a widget's value only
+    # updates on submit, so a preview there would show the text as it was before the edit.
+    # Out here it shows what students are actually reading right now.
+    with get_session() as session:
+        live_faq = (core_admin.all_settings(session).get("faq_md") or "").strip()
+    with st.popover("Preview the FAQ students see"):
+        st.markdown(live_faq or "_The FAQ page is empty._")
+
+    st.markdown("---")
+    _documents_section()
+
+
+def _course_settings_fields(current: dict) -> dict:
+    """Draw the fields and return what they hold. Collects only — the caller persists."""
     # --- identity -----------------------------------------------------------
     with st.expander("① Course name and instructor — who this app belongs to", expanded=True):
         st.markdown(
@@ -113,8 +148,7 @@ def _course_tab() -> None:
             "same thing, that is the signal.")
         faq_md = st.text_area("FAQ content (Markdown)", value=current.get("faq_md", ""),
                               height=220)
-        with st.popover("Preview"):
-            st.markdown(faq_md or "_Empty_")
+        st.caption("A preview of what students currently see is below this form.")
 
     # --- comparison scope ---------------------------------------------------
     with st.expander("④ How much data may students compare against?", expanded=False):
@@ -144,20 +178,16 @@ def _course_tab() -> None:
             "Students work in groups", key="cfg_group_layer",
             value=bool((current.get("active_layers") or {}).get("group", True)))
 
-    if st.button("Save course settings", type="primary"):
-        with get_session() as session:
-            core_admin.set_setting(session, "course_name", course_name)
-            core_admin.set_setting(session, "instructor", instructor)
-            core_admin.set_setting(session, "banner", banner)
-            core_admin.set_setting(session, "max_scope", max_scope)
-            core_admin.set_setting(session, "faq_md", faq_md)
-            layers = dict(current.get("active_layers") or {})
-            layers["group"] = group_layer
-            core_admin.set_setting(session, "active_layers", layers)
-        C.notice("Saved. Students see the change on their next click.", "ok")
-
-    st.markdown("---")
-    _documents_section()
+    layers = dict(current.get("active_layers") or {})
+    layers["group"] = group_layer
+    return {
+        "course_name": course_name,
+        "instructor": instructor,
+        "banner": banner,
+        "max_scope": max_scope,
+        "faq_md": faq_md,
+        "active_layers": layers,
+    }
 
 
 def _documents_section() -> None:

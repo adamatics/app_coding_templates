@@ -69,3 +69,56 @@ def test_no_internal_module_is_exposed_as_a_page():
     internal = {"login", "session_url", "session url", "components", "_components", "admin_page"}
     offered = {label.lower() for label in app.PAGES}
     assert not (offered & internal), f"internal modules exposed as pages: {offered & internal}"
+
+
+def test_navigation_is_driven_by_callbacks_not_widget_return_values():
+    """The structural guard for "hitting Enter takes me out of the admin page".
+
+    Navigation used to be derived from the sidebar radio's return value:
+
+        chosen = st.radio(...)
+        if chosen is not None and chosen != page:
+            page = st.session_state["page"] = chosen
+
+    In a browser the radio reports its stored selection on *every* rerun, including reruns
+    nobody asked for — pressing Enter in a text field, a websocket reconnect. The comparison
+    then "corrected" the page back to whatever the radio remembered, throwing a teacher out of
+    the admin page mid-edit.
+
+    A callback fires only on a genuine change, so a rerun from anywhere else cannot navigate.
+
+    **This test is structural on purpose.** `AppTest` sets widget values directly and does not
+    reproduce the browser's widget-state behaviour — the behavioural tests in
+    `test_app_renders.py` pass against the broken version too. What can be pinned is the
+    shape of the fix, so the pattern cannot come back unnoticed.
+    """
+    source = (APP_ROOT / "app.py").read_text(encoding="utf-8")
+
+    assert "on_change=_nav_radio_changed" in source, \
+        "the navigation radio must change the page through a callback"
+    assert "key=NAV_KEY" in source, \
+        "the navigation radio needs an explicit key so its state is addressable"
+    assert "on_click=_select_page" in source, \
+        "the secondary-page buttons must navigate through a callback, not an if-block"
+
+    # The exact shape of the bug: comparing a widget's return value against the current page
+    # and "correcting" the page to match. Assigning inside a callback is fine — that is the
+    # fix — so the check targets the comparison, not the assignment.
+    assert "chosen != page" not in source, (
+        "the page must not be derived by comparing a widget's return value against it — that "
+        "is the pattern that navigated on passive reruns")
+    assert "= st.radio(" not in source, (
+        "don't bind the navigation radio's return value; drive navigation from its on_change "
+        "callback so only a real selection moves the page")
+
+
+def test_only_the_navigation_helpers_assign_the_current_page():
+    """One writer, so there is one place to look when navigation misbehaves."""
+    source = (APP_ROOT / "app.py").read_text(encoding="utf-8")
+    assignments = [line.strip() for line in source.splitlines()
+                   if 'st.session_state["page"]' in line and "=" in line
+                   and "==" not in line and not line.strip().startswith("#")]
+    # `_select_page`, `_nav_radio_changed`, and the reset of a stale value on load.
+    assert len(assignments) <= 3, (
+        "more than three places assign the current page; navigation should stay in "
+        f"_select_page/_nav_radio_changed:\n" + "\n".join(assignments))
