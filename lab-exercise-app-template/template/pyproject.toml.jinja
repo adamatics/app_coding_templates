@@ -5,38 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "{{ project_slug }}"
 version = "0.1.0"
-description = "{{ exercise_title }} — a CPDSE student lab-exercise app"
+description = "{{ app_description }}"
 requires-python = ">=3.11"
 authors = [{ name = "{{ host_institution }}", email = "{{ contact_email }}" }]
 dependencies = [
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.27",
+    "streamlit>=1.38",
+    "pandas>=2.0",
+    "plotly>=5.20",
+    "lmfit>=1.2",
     "sqlalchemy>=2.0",
     "pydantic>=2.6",
-    "itsdangerous>=2.1",
-    "pandas>=2.0",
-    "pyarrow>=14",
+    "openpyxl>=3.1",      # Excel export
+    "reportlab>=4.0",     # PDF report (pure Python, headless — no system libs)
+    "kaleido==0.2.1",     # static plot images for the PDF
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
-    "httpx>=0.27",
     "ruff>=0.6",
 ]
 
-# The backend package `app` lives under backend/; the exercise seam is a top-level
-# `exercise` package at the app root. This mapping lets `pip install .` pull the
-# dependencies above (used by the Containerfile) despite the two source roots.
+# core/ is framework-free and is the seed of the shared library later apps will depend on
+# (§B1), so it is packaged alongside the Streamlit UI and the exercise seam.
 [tool.setuptools]
-packages = ["app", "app.routers", "exercise"]
-
-[tool.setuptools.package-dir]
-"" = "backend"
-exercise = "exercise"
+packages = ["core", "pages", "exercise"]
 
 [tool.pytest.ini_options]
-# Make `app.*` (under backend/) and `exercise.*` (at root) importable in tests
-# without installing the project.
-pythonpath = ["backend", "."]
-testpaths = ["backend/tests"]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

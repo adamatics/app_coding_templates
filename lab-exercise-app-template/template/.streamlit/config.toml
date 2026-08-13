@@ -1,0 +1,27 @@
+# Streamlit configuration (CHASSIS).
+# Colours mirror core/theme.py (the CPDSE identity, spec §13). Streamlit's theme needs literal
+# values here — core/theme.py remains the source of truth for everything the app renders.
+
+[theme]
+primaryColor = "#D6C17C"            # Antique Gold (buttons/accents)
+backgroundColor = "#F9F9F9"         # Soft White (never pure #FFFFFF)
+secondaryBackgroundColor = "#F6F1DC" # Ivory Gold Tint (cards, sidebar)
+textColor = "#333333"               # Charcoal
+font = "sans serif"                  # Verdana stack applied via CSS in pages/_components.py
+
+[server]
+headless = true
+address = "0.0.0.0"
+port = 8000
+# CORS/XSRF off: the app sits behind the AdaLab proxy, which terminates and forwards.
+enableCORS = false
+enableXsrfProtection = false
+# Students paste long compound lists; keep uploads small but workable.
+maxUploadSize = 20
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = false

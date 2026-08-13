@@ -1,14 +1,14 @@
 # Schema cookbook
 
-`exercise/schema.py` defines exactly one Pydantic v2 model named `Measurement`. Every field
-becomes a form input, a table column, an export column, and — if numeric — a chart series.
+`exercise/schema.py` defines exactly one Pydantic v2 model named `Measurement`. It is imported by framework-free `core/`, so it must never import streamlit. Every field
+becomes a stored value, a table column, an export column, and — if numeric — a chart candidate.
 Keep the model name `Measurement`.
 
 ## Field patterns
 
 ### Numeric with units and a range
-Always put the unit in `description` and a sensible range in `ge`/`le`. The form shows the
-unit as help text and enforces the range on both client and server.
+Always put the unit in `description` and a sensible range in `ge`/`le`. Use them as the
+input's help text and min/max in `exercise/capture.py`; the chassis re-validates on submit.
 
 ```python
 temperature_c: float = Field(ge=-50, le=150, description="Sample temperature, °C")
@@ -63,10 +63,18 @@ notes: Optional[str] = Field(default=None, max_length=500, description="Anything
 
 Ship the app with a schema that already exercises the common patterns (a numeric+unit field,
 a dropdown, a replicate, a date, and an optional note), so a stamped app runs end to end and
-demonstrates the form/table/chart/export before anyone customises it. The default absorbance
+demonstrates capture/table/plots/export before anyone customises it. The default logP
 example does this.
 
 ## After you edit
 
-Nothing else to do. Reload the app and check **Enter results** (new input), **Results**
-(new column + chart candidate if numeric), and the CSV export (new column).
+Two steps, both in the seam:
+
+1. `exercise/schema.py` — add the field (this drives storage, the CSV mirror and all exports).
+2. `exercise/capture.py` — add the matching input to `render_form` and include it in the
+   returned payload dict, so students can actually enter it. The chassis validates the payload
+   against the schema before storing.
+
+Nothing else to do: the results table, the CSV mirror, and the CSV/Excel/PDF/HTML exports all
+follow the schema. If you want the new field plotted, add a `core.plots` call in
+`exercise/analysis.py` (that also gives it a "Show the code" panel).

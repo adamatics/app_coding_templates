@@ -1,2 +1,4 @@
-"""The exercise seam. Only ``schema.py``, ``analysis.py`` and ``content.md`` are edited
-per app; the chassis derives everything else from them."""
+"""The exercise seam (Addendum B). Only schema.py is imported by core/ (framework-free);
+capture.py and analysis.py are imported by the chassis pages and may use streamlit. Do NOT
+import capture/analysis here — that would pull streamlit into core's import of exercise.schema.
+"""

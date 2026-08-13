@@ -2,79 +2,71 @@
 
 **This app has two zones. Edit only one of them.**
 
-- **The seam** (edit these to change the exercise): `exercise/schema.py`,
-  `exercise/analysis.py`, `exercise/content.md`.
-- **The chassis** (identical in every app in this family — do NOT edit per app): the
-  backend, the frontend, deployment config, and this `.claude/` guidance.
+- **The seam** (`exercise/**`) — the only per-app code. Python only; it *may* use streamlit.
+- **The chassis** (`core/`, `pages/`, `app.py`, deploy config) — identical in every app in
+  this family. Do NOT edit it per app.
 
-Adding or changing a measurement field means editing **`exercise/schema.py` only**. The
-entry form, the results table, the chart candidates and the export columns are all derived
-from that Pydantic model at runtime — they update automatically. You almost never need to
-touch the chassis.
+The app is a single-process **Streamlit** application:
 
-Guardrails are enforced in three layers (Addendum A §A4): this file, the
-`permissions.deny`/`permissions.ask` lists in `.claude/settings.json`, and the real
-enforcement — a `chassis_guard` PreToolUse hook that exits non-zero to block. The three name
-the same protected set.
+```
+core/       framework-free Python. Imports streamlit NOWHERE.
+            identity, storage, cohorts, results, export, admin, plot helpers.
+pages/      thin Streamlit UI — chassis pages only.
+exercise/   THE SEAM: schema.py, capture.py, analysis.py, content.md.
+app.py      entry point, course gate, navigation.
+```
+
+**`core/` must never import streamlit.** That is what keeps the UI swappable and makes
+`core/` reusable as a shared library later; `tests/test_core_no_streamlit.py` enforces it and
+will fail the build on a stray import. `exercise/schema.py` is imported by `core/`, so it must
+stay framework-free too.
 
 ## Protected zone (do not edit — the hook blocks these)
 
-- `backend/app/**`
-- `frontend/src/App.tsx`
-- `frontend/src/main.tsx`
-- `frontend/src/api.ts`
-- `frontend/src/metaContext.ts`
-- `frontend/src/global.d.ts`
-- `frontend/src/ui.css`
-- `frontend/src/lib/**`
-- `frontend/src/components/**`
-- `frontend/src/pages/**`
-- `frontend/src/assets/**`
-- `frontend/vite.config.ts`
-- `frontend/tsconfig.json`
-- `frontend/index.html`
-- `frontend/scripts/**`
+- `core/**`
+- `pages/**`
+- `app.py`
+- `assets/**`
 - `.adalab/app.json`
 - `.adalab/project.json`
 - `.adalab/card.json`
 - `.vscode/**`
 - `Containerfile`
+- `uv.lock`
+- `poetry.lock`
+- `requirements.txt`
 - `.claude/settings.json`
 - `.claude/hooks/**`
 
-## Editable with confirmation (sensitive, but sometimes legitimately changed)
+## Editable with confirmation
 
-- `frontend/src/theme.css` — the CPDSE identity. Only the palette tokens live here; never add
-  a hex value elsewhere, and never invent an error red/amber (the palette has none).
-- `.adalab/local_container_demo.json` — deploy resources for this app.
-- `pyproject.toml`, `frontend/package.json`, and dependency-add commands — for adding a
-  library your analysis needs.
+`.adalab/local_container_demo.json`, `pyproject.toml`, `.streamlit/config.toml`, and
+dependency-add commands (`pip/uv/poetry install|add`).
 
-The always-writable zone is the exercise seam: `exercise/**`.
+The always-writable zone is the seam: `exercise/**`.
 
 ## You want to… → edit
 
-- Add / change / remove a measurement field → `exercise/schema.py`
-- Change field units, ranges, or help text → `exercise/schema.py` (in the `Field(...)`)
-- Add a dropdown / date / notes field → `exercise/schema.py` (`Literal[...]`, `date`, `str | None`)
-- Add exercise-specific statistics on the Results page → `exercise/analysis.py` (`summarize(df)`)
-- Change the Home-page instructions → `exercise/content.md`
-
-The form, table, charts and export **follow the schema** — do not hand-edit them.
+- Add / change a measurement field → `exercise/schema.py` (storage, CSV and export columns follow)
+- Change the input UI → `exercise/capture.py` (returns a payload dict; the chassis validates it)
+- Add or change a plot → `exercise/analysis.py`, built with `core.plots` helpers
+- Change instructions or the analysis questions → `exercise/content.md`
+  (questions are the list items under `## Analysis questions`)
 
 ## How the pieces fit (so you don't reinvent them)
 
-- Persistence is **append-only** with cohort semantics. Students never edit or delete;
-  a correction *supersedes*. "Reset for a new class" = an admin *closes* the cohort and
-  *opens* a new one. Nothing is ever deleted. Do not invent your own storage — see
-  `.claude/skills/lab-exercise-app/references/data-model.md`.
-- Data lives on a mounted AdaLab Shared Volume at `$DATA_DIR` (default `/asv-mnt/lab-data`).
-  The app **fails loud** if that volume isn't mounted/writable — never point `DATA_DIR` at a
-  container-local path to "fix" a startup error; that silently loses a year of data.
-- The measurement contract lives in `exercise/schema.py` as a single Pydantic model named
-  `Measurement`. Keep that name.
+- **Plots must come from `core.plots`**, which returns `(figure, code_str)`. The chassis shows
+  `code_str` in a "Show the code" panel — plain pandas + plotly that runs in a notebook against
+  an exported CSV. Never hand-build a plotly figure in the seam, or students lose that panel.
+- **Identity** is KUID → group → hold → year (§B2). Never add per-student passwords; the
+  course password is the gate.
+- **Persistence is append-only**: corrections *supersede*, "reset" *closes a year*, nothing is
+  deleted. SQLite is the system of record with a long-format CSV mirror; both live on the
+  mounted AdaLab Shared Volume at `$DATA_DIR`. The app **fails loud** if that volume is
+  missing — never point `DATA_DIR` at a container-local path to "fix" a startup error.
+- **Comparison views are anonymised** (no KUID or group labels) by design.
 
 ## Conventions
 
-Style and component rules are in `.claude/rules/`. Use the **`lab-exercise-app`** skill for
-any request to adapt the app, and `/new-exercise-field` to add a field interactively.
+Style and composition rules are in `.claude/rules/`. Use the **`lab-exercise-app`** skill for
+any request to adapt this app, and `/new-exercise-field` to add a measurement field.

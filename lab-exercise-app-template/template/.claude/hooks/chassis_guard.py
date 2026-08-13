@@ -26,28 +26,20 @@ import re
 import sys
 from pathlib import Path
 
-# --- the canonical protected set (keep identical across all three guardrail layers) ---
+# --- the canonical protected set (Addendum B §B9; identical across all three layers) ---
 PROTECTED = [
-    "backend/app/**",
-    "frontend/src/App.tsx",
-    "frontend/src/main.tsx",
-    "frontend/src/api.ts",
-    "frontend/src/metaContext.ts",
-    "frontend/src/global.d.ts",
-    "frontend/src/ui.css",
-    "frontend/src/lib/**",
-    "frontend/src/components/**",
-    "frontend/src/pages/**",
-    "frontend/src/assets/**",
-    "frontend/vite.config.ts",
-    "frontend/tsconfig.json",
-    "frontend/index.html",
-    "frontend/scripts/**",
+    "core/**",
+    "pages/**",
+    "app.py",
+    "assets/**",
     ".adalab/app.json",
     ".adalab/project.json",
     ".adalab/card.json",
     ".vscode/**",
     "Containerfile",
+    "uv.lock",
+    "poetry.lock",
+    "requirements.txt",
     ".claude/settings.json",
     ".claude/hooks/**",
 ]
@@ -69,14 +61,15 @@ def _is_protected(rel: str) -> bool:
 def _edit_message(rel: str) -> str:
     return (
         f"\n⛔ chassis_guard: '{rel}' is a CHASSIS file and must not be edited per app.\n\n"
-        "To change the exercise, edit ONLY the seam:\n"
-        "  • exercise/schema.py    — the measurement fields\n"
-        "  • exercise/analysis.py  — optional derived statistics\n"
-        "  • exercise/content.md   — the Home-page instructions\n\n"
-        "The entry form, results table, chart candidates and export columns are ALL derived\n"
-        "from exercise/schema.py, so adding a field there updates every one of them\n"
-        "automatically — you almost never need to touch the chassis.\n"
-        "(theme.css and .adalab/local_container_demo.json are editable WITH confirmation.)\n"
+        "To change the exercise, edit ONLY the seam (exercise/**):\n"
+        "  • exercise/schema.py    — the measurement fields (drives storage, CSV, exports)\n"
+        "  • exercise/capture.py   — the Streamlit input UI for this exercise\n"
+        "  • exercise/analysis.py  — the exercise's plots (via core.plots)\n"
+        "  • exercise/content.md   — instructions + the analysis questions\n\n"
+        "core/ is framework-free and must never import streamlit; pages/ is the chassis UI.\n"
+        "Compose components from core/ and pages/_components.py rather than styling from\n"
+        "scratch, so the CPDSE identity holds across apps.\n"
+        "(.adalab/local_container_demo.json and pyproject.toml are editable WITH confirmation.)\n"
         "See .claude/skills/lab-exercise-app/ for the chassis-vs-seam map.\n"
         "(Template maintainers editing the chassis itself: set ALLOW_CHASSIS_EDIT=1.)\n"
     )

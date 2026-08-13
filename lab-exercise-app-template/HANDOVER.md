@@ -1,217 +1,318 @@
 # HANDOVER — `lab-exercise-app-template`
 
-A Copier template that stamps out CPDSE student lab-exercise apps: a FastAPI + SQLite backend
-and a React 18 + Vite + TypeScript frontend served by the **same** process (one container,
-port 8000), the CPDSE visual identity, append-only cohort-based persistence, an admin area,
-CSV/Parquet export, and agent guidance with a three-layer chassis guardrail. Built against
-`Lab_Exercise_App_Template_Spec.md` **and** `Lab_Exercise_App_Template_Addendum_A.md` (the
-addendum wins on conflicts).
+A Copier template that stamps out CPDSE student lab-exercise apps as **single-process
+Streamlit applications** (Python 3.11, one container, port 8000), with a framework-free
+`core/`, a thin Streamlit `pages/` chassis, and a Python-only exercise seam.
 
-**Bottom line:** the two load-bearing goals — the chassis/seam split and data durability —
-are implemented and verified, including in a real Python-3.11 container and a redeploy
-simulation. The addendum's AdaLab conventions (§A1–A4) are implemented to the letter of its
-text. What I can't verify is anything requiring a live AdaLab tenant; that's called out below.
+Built against three documents, later winning over earlier:
+`Lab_Exercise_App_Template_Spec.md` → `Addendum_A` (AdaLab + persistence) →
+`Addendum_B` (Streamlit switch + CPDSE decisions).
 
----
-
-## 1. The addendum: missing, then provided, reconciled twice
-
-`Lab_Exercise_App_Template_Addendum_A.md` was absent when I started, so I first reconciled
-against the change table described inline in the instructions. The real file was then
-provided and I reconciled a **second time against its exact text**. The second pass changed
-several things I had guessed at — details in `DECISIONS.md` ("Addendum A — reconciled against
-the ACTUAL text"). The most significant:
-
-- **Base-path resolution is now in the FRONTEND** (`frontend/src/lib/basepath.ts`, from
-  `window.location.pathname`, §A1), replacing my earlier backend `X-Forwarded-Prefix`
-  injection. That backend module, the `<base href>`/`window.__BASE_PATH__` injection, and
-  `meta.base_path` were **discarded**. AdaLab's `stripped_prefix: true` strips the prefix, so
-  the backend serves at root and never needs to know it; the browser URL keeps the prefix,
-  which the frontend reads.
-- `.adalab/local_container_1.json` → **`local_container_demo.json`**, with a new
-  `app_description` Copier question and `maintainers: []`, to match §A2 verbatim.
-- The guardrail was **reworked** to §A4's richer model (granular deny set + a `permissions.ask`
-  tier + dangerous-bash blocks + PostToolUse formatting + SessionStart + `.claude/rules`).
-
-Nothing from the durability core (models, services, routers, most tests) had to be discarded.
+**Bottom line.** The §B1 deployment check was done first and produced a real finding that
+changed the deploy config. The three load-bearing items are implemented and verified:
+`core/` never imports streamlit (tested two ways), every plot's "Show the code" runs
+standalone against an exported CSV (executed in a clean subprocess), and 60 concurrent
+sessions submit with no errors and no cross-session leakage (which caught a real bug).
+**69 tests pass**; the container builds and runs. What needs a live AdaLab tenant is called
+out plainly and is *not* claimed as passing.
 
 ---
 
-## 2. What I built (map)
+## 1. §B1 deployment check — done first, with a finding
 
-- **Chassis backend** (`backend/app/`): `main.py` (API + static), `config.py.jinja`,
-  `db.py` (WAL + fail-loud storage), `models.py`, `services.py` (the single home of the
-  durability rules), `auth.py`, `exercise_bridge.py` (chassis↔seam boundary), `storage.py`
-  (volume IO), `seed_demo.py`, `routers/{public,admin,export}.py`.
-- **Exercise seam** (`exercise/`): `schema.py` (a worked absorbance example), `analysis.py`,
-  `content.md` — the only files an author edits.
-- **Chassis frontend** (`frontend/src/`): `App.tsx` shell, `lib/basepath.ts`,
-  `components/{SchemaForm,DataTable,Chart,ConfirmButton}.tsx`, `pages/*`, `theme.css`
-  (identity tokens), `ui.css`, and the `check-theme.mjs` brand guard.
-- **Deploy**: `Containerfile` (Node 20 build → `python:3.11-slim`), `.adalab/{project,app,
-  local_container_demo,card}.json`, `.vscode/settings.json`.
-- **Agent assets**: `.claude/CLAUDE.md`, `settings.json` (deny/ask + 3 hooks),
-  `hooks/{chassis_guard,format,session_start}.py`, `rules/*.md`, the `lab-exercise-app`
-  skill (+3 references), and the `/new-exercise-field` command.
+**No AdaLab tenant is reachable from this environment**, so per your instruction I built a
+local equivalent that proves the same two properties, and I say plainly below what remains
+unverified.
 
----
+**Setup.** Hello-world Streamlit run with `--server.baseUrlPath apps/hello`, fronted by a
+passthrough TCP proxy (a proxy hop between client and app, as AdaLab has).
 
-## 3. Decisions worth your attention
+| Check | Direct | Through proxy |
+| --- | --- | --- |
+| HTML page under the prefix | 200 | 200 |
+| JS bundle / font / favicon under the prefix | 200 | 200 |
+| `/_stcore/health` | ok | ok |
+| **WebSocket `/_stcore/stream`** | **101, session established** | **101, held open** |
+| Same paths *without* the prefix (control) | 404 | — |
 
-Full list in `DECISIONS.md`. Highlights:
+**Finding — this changed the deploy config.** Streamlit's router requires the prefix to be
+present on incoming requests: with `baseUrlPath` set, requests at `/` return **404**. That is
+exactly what a *stripping* proxy would deliver. So Addendum B's "retain `stripped_prefix:
+true`" cannot hold together with `--server.baseUrlPath`, and §B1 is the check designed to
+surface this (it says: if assets don't resolve, set `--server.baseUrlPath` — which requires
+the prefix to arrive intact).
 
-- **Base path is frontend-resolved** from the URL; the backend serves at root behind
-  AdaLab's stripped prefix. One build runs at `/` or `/apps/<slug>/`.
-- **`.adalab` matches §A2 exactly** (`stripped_prefix: true`, `uid: 1`, `local_container_demo.json`,
-  `maintainers: []`); `access_level: logged_in` ships as the safe default with the README
-  telling teachers to switch it to `public` for classes.
-- **Storage is fail-loud** and the app **never creates `DATA_DIR`** — a missing/unwritable
-  volume stops startup with a message + the mount fix; sub-dirs only are created inside.
-- **The guardrail hook is the real enforcement** (deny/ask lists are advisory). `theme.css`
-  and `.adalab/local_container_demo.json` are **ask** (editable with confirmation), not deny.
-- **Session secret is ephemeral** (§8 "derived at startup"); admins re-login after a restart.
+**Resolution:** `.adalab/app.json` sets **`stripped_prefix: false`** and the container runs
+Streamlit with `--server.baseUrlPath=$BASE_URL_PATH` (defaulting to the app slug). Documented
+in the app README with the one-line fallback if a future AdaLab version behaves differently
+(`BASE_URL_PATH=""` + `stripped_prefix: true`).
 
----
-
-## 4. How to run the verification yourself
-
-```bash
-copier copy --defaults --trust lab-exercise-app-template /tmp/out
-cd /tmp/out/absorbance-lab
-
-# Backend tests (pip install fastapi uvicorn sqlalchemy pydantic itsdangerous pandas pyarrow pytest httpx)
-DATA_DIR=$(mktemp -d) python -m pytest -q            # 41 passed
-
-# Frontend build (no-hex brand check + type-check + vite)
-cd frontend && npm install && npm run build && cd ..
-
-# Container, with the required volume
-podman build -t app .                                # or docker build -f Containerfile -t app .
-mkdir -p ./lab-data
-podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e ADMIN_PASSWORD=secret -e DEMO_MODE=true app
-```
-
-Container builds were verified with **Docker** (podman absent here); the Containerfile is
-OCI-standard and the podman invocation works unchanged.
+**Not verifiable here:** whether AdaLab's real proxy forwards the prefix and holds the
+websocket open for a long session. The local equivalent proves Streamlit's side and that a
+proxy hop is not inherently fatal; the tenant's proxy config is the remaining unknown. This
+is the single highest-value thing to check on a real tenant before building more apps.
 
 ---
 
-## 5. Base spec §15 acceptance — results
+## 2. What was discarded and what was salvaged
 
-✅ verified · 🟡 verified by proxy · ⚪ needs a live AdaLab tenant.
+**Discarded (per §B1).** The entire `frontend/` tree (React 18, Vite, TypeScript, `App.tsx`,
+`api.ts`, `SchemaForm`/`DataTable`/`Chart`/`ConfirmButton`, all pages, `theme.css`, `ui.css`,
+the `check-theme.mjs` brand guard, `package.json`/`tsconfig.json`/`vite.config.ts`, the SVG
+assets), the **Node build stage** in the Containerfile, `frontend/src/lib/basepath.ts`, and
+the **React/TypeScript guardrail rule** (`.claude/rules/react-conventions.md`). Also gone with
+the framework: the FastAPI layer (`backend/app/main.py`, `auth.py`, all `routers/`), since
+Streamlit is the process now.
 
-1. **✅ `copier copy` defaults → builds container, runs with an empty (mounted) `DATA_DIR`.**
-   Clean generation (0 unrendered `.jinja`); image builds on Python 3.11; a fresh empty
-   volume yields DB + tables + first cohort. Post-addendum, "empty `DATA_DIR`" means an empty
-   *mounted* volume; an unmounted path fails loud by design.
-2. **🟡 Two sessions, concurrent submit, both visible.** `test_concurrency.py` runs 30
-   concurrent writers; all persist. Not two literal browsers, but the API/DB path is proven
-   under real thread concurrency.
-3. **✅ Supersede; latest shown; history export flags both.** Tests + manual container check.
-4. **✅ Admin lifecycle.** Verified live in the container: wrong pw 401, correct 200, close
-   409-on-write, open new, old cohort exportable.
-5. **✅ Kill + restart same volume → intact.** Verified live (and see §A6.14).
-6. **✅ `DEMO_MODE` seeds two prior cohorts; compare renders.** Cohorts seeded (14 each);
-   `cohort=all` feeds the per-cohort compare chart. Chart correctness via build + logic +
-   data, not a pixel screenshot.
-7. **✅ Agent test (add field / block chassis).** The hook blocks all chassis paths and allows
-   the seam (matrix verified); export columns follow schema field order (`test_seam.py`). No
-   live Claude Code agent session was run inside a stamped app.
-8. **✅ Brand check.** `check:theme` passes and gates the build. Approved fill/ink pairs; the
-   header title uses §13's directed Soft-White-on-Forest (high-contrast; noted in the app
-   README). Charcoal-on-Soft-White/Ivory meet AA (asserted from palette values, not a tool).
-9. **⚪ Deployed on AdaLab under `/apps/<slug>/`.** Needs a tenant. The mechanism (frontend
-   `basepath.ts` reading the prefixed browser URL under `stripped_prefix`) is verified in
-   isolation for `/`, single- and nested-segment routes; card deploy is tenant-dependent.
-10. **✅ `pytest` green.** **41 passed** on a fresh stamp (default and custom answers).
+**Salvaged and ported (framework-independent).** The data model and every durability rule
+(append-only, supersede, close-never-delete, single-row audited hard delete), cohort
+lifecycle, admin logic (constant-time compare, fail-closed), group merge/rename/delete
+semantics, export column stability, the `.adalab/` configuration, ASV persistence with
+fail-loud startup and `lost+found`/`.AVI_SUCCESS` filtering and atomic writes, the demo seeder
+(still schema-driven), the CPDSE palette (now `core/theme.py`), and all agent guidance assets
+(CLAUDE.md, the skill + references, `/new-exercise-field`, the three-layer guardrail
+structure, the format/SessionStart hooks) — each updated for the new architecture.
+
+**Rewritten around the new architecture.** `core/` gained `identity.py` (KUID + course gate),
+`plots.py` (§B7), `export.py` (four formats), `analysis.py`, `preflight.py`, `storage.py`; the
+old FastAPI routers became `pages/*`; tests moved `backend/tests/` → `tests/`.
 
 ---
 
-## 6. Addendum §A6 acceptance — results
+## 3. The three load-bearing items
 
-11. **✅ Builds/runs on 8000; `.adalab` matches §A2 (`stripped_prefix: true`, `uid: 1`).**
-    Container listens on 8000; `app.json` and `local_container_demo.json` were byte-checked
-    against §A2 (stripped_prefix true, uid 1, port/test_serving_port 8000, `volume_mounts: []`,
-    `maintainers: []`).
-12. **✅ Missing/unwritable `DATA_DIR` fails loud, no silent fallback.** Verified live: a
-    container with no volume prints the path + mount fix and exits ("Application startup
-    failed"). `test_storage.py` pins missing/unwritable/never-created.
-13. **✅ `lost+found` and `.AVI_SUCCESS` filtered wherever the app enumerates the volume.**
-    `storage.list_volume_dir` filters them and is the one enumeration path
-    (`GET /api/admin/exports`); `test_storage.py` + `test_export.py` confirm.
-14. **✅ Redeploy simulation (new image tag, same mount).** Docker: build `:v1` → submit a
-    group + result → destroy the container → build `:v2` (new tag) → run against the same
-    `/asv-mnt/lab-data` mount → the group and result are intact. [CONFIRMED — see verification log]
-15. **🟡 Router basepath resolves at runtime, no rebuild.** `resolveBasePath` verified for
-    `/`, `/results`, `/apps/x/`, `/apps/x/results`, `/apps/x/admin/cohorts`. Full end-to-end
-    under a real AdaLab prefix needs a tenant (⚪).
-16. **✅ Three guardrail layers consistent.** `permissions.deny`, the hook's `PROTECTED`, and
-    the `CLAUDE.md` protected-zone bullets are the identical 22-pattern set (script-checked).
-17. **✅ README has the ASV runbook + single-replica constraint.** Create → ACL → mount in lab
-    → `chown`/`chmod` → mount with Fast Mount; plus the single-replica warning and the
-    Test → Build → Deploy order.
+### 3.1 `core/` never imports streamlit (§B1) — VERIFIED
+`tests/test_core_no_streamlit.py` proves it three ways: an **AST scan** of every `core/*.py`,
+a **subprocess import of all 17 core modules with streamlit blocked** by an import hook
+("core imports and its tests pass with no Streamlit installed"), and a check that importing
+`core` doesn't pull streamlit in even when it *is* installed. It also asserts
+`exercise/schema.py` stays framework-free, since `core` imports it.
 
----
+Structurally: `core/exercise_bridge.py` deliberately imports only `exercise.schema` and reads
+`content.md`; the streamlit-using `exercise/capture.py` and `exercise/analysis.py` are imported
+by `pages/`, never by `core/`.
 
-## 7. What I deliberately simplified
+### 3.2 "Show the code" (§B7) — VERIFIED
+`core/plots.py` helpers return `(figure, code_str)`. `code_str` is plain
+`pandas` + `plotly.express` that reads an exported CSV — never Streamlit-specific — and is
+generated from the same call that drew the figure, so it cannot drift.
+`tests/test_show_the_code.py` writes the exported CSV into a **clean temp directory** and runs
+each snippet in a **fresh subprocess with no app code importable** — the exact situation of a
+student pasting it into a notebook. Every plot the reference app renders is covered.
 
-- **Charts** are a compact dependency-free inline-SVG bar chart (mean per cohort/group,
-  current cohort Forest, prior Mint). Satisfies the compare view + §13 colour order; not a
-  rich viz (no error bars/box plots).
-- **"Migrations"** are `create_all` (idempotent) — the schema is chassis-fixed; a schema
-  *field* changes the JSON payload, not the SQL tables.
-- **No frontend unit tests** — the frontend is covered by type-check + build + the no-hex
-  check + manual container verification; the schema→UI guarantee is tested on the backend.
-- **Exports persist with stable filenames** (bounded, overwrite) so the atomic-write and
-  volume-listing requirements are concrete and testable rather than vacuous.
-- **`card.json`** is kept (base §12 + §A2 "remains unchanged"); its exact card-as-code fields
-  are unverified against a tenant.
+### 3.3 Concurrency (§B10) — VERIFIED, and it caught a real bug
+`tests/test_concurrency.py` runs **60 threads = 60 sessions** submitting simultaneously, then
+asserts every row is attributed to its own member/KUID/group (no cross-session leakage), plus
+a 20-way concurrent-registration race and a CSV-mirror consistency check.
+
+**The bug it caught:** `atomic_write_bytes` named its temp file by **PID only**. In Streamlit
+all sessions are threads in *one* process, so 60 sessions collided on one temp filename and 11
+submissions died with `FileNotFoundError` on `os.replace`. Fixed by making the temp name unique
+per pid+thread+counter, and by serialising the whole-file mirror rewrite behind a lock. This is
+exactly the failure §B10 exists to prevent (a ruined first lesson with two classes in the lab).
 
 ---
 
-## 8. Weakest spots (where I'd look first)
+## 4. A second real defect found by container testing
 
-1. **Anything needing a live AdaLab tenant is unverified**: the real `/apps/<slug>/` deploy
-   (§15.9, §A6.15 end-to-end), the Gallery card deploy, and that the ASV + Fast Mount + chmod
-   runbook is exactly right. I verified the *mechanisms* and matched the sibling-template
-   conventions and AdaLab docs, but not tenant behaviour.
-2. **The frontend chassis/seam guarantee is structural, not unit-tested.** `SchemaForm`
-   handles the documented field patterns (number/int/enum/date/string/bool/optional), not
-   arbitrary JSON Schema (arrays, nested objects, multi-branch unions). An exotic schema would
-   render poorly rather than failing loudly.
-3. **Dangerous-bash blocking is heuristic.** I modelled it on the addendum's description (no
-   `protect_paths.py` to copy). It blocks the high-value cases (deleting the volume/DB, wiping
-   a chassis tree, tampering with the guard) and errs toward not blocking to avoid false
-   positives — so it is not an exhaustive shell sandbox.
-4. **Brand contrast is asserted, not audited** with a WCAG tool, and the header title uses a
-   §13-directed pair outside the six named ones (documented).
-5. **`permissions.deny`/`ask` matching depends on the host Claude Code version's glob
-   semantics.** The hook is the real enforcement and is verified; the lists are the advisory
-   second layer.
+Running the built image with **no volume mounted**, the container **started and served the app
+anyway** — because `init_db()` ran lazily inside `@st.cache_resource` on first page render, so
+Streamlit bound the port first. That is the "looks fine in the classroom, loses a year of data
+at the next redeploy" failure mode §A3 forbids.
+
+**Fixed** with `core/preflight.py`, run by the container entrypoint *before* Streamlit
+(`python -m core.preflight && exec streamlit run ...`). Verified in a real container: with no
+volume the container **exits 1** with `STARTUP ABORTED` naming the path, and Streamlit never
+starts. Two regression tests pin it.
 
 ---
 
-## 9. What I'd do next with more time
+## 4b. Added after Addendum B, at your request
 
-- Deploy one stamped app to a real AdaLab tenant: close §15.9, §A6.15, the card deploy, and
-  confirm the ASV/Fast Mount/chmod runbook and redeploy-survival on the actual platform.
-- Add a **Vitest** frontend test that feeds `SchemaForm`/`basepath.ts` synthetic inputs, so
-  the frontend half of the chassis/seam guarantee is a test, not a claim.
-- Obtain the sibling's `protect_paths.py` and align the dangerous-bash rules exactly.
-- Ship a **second worked seam** (e.g. a titration with a pH field) + a CI job that stamps and
-  runs it, proving "define the schema, get the app" beyond the default example.
-- Run a real Claude Code agent session in a stamped app for §15.7 (add a pH field / try to
-  change group storage) to verify the *agent experience*, not just the hook mechanics.
+**Durable sessions without student passwords.** Streamlit's `session_state` dies on refresh, so
+a student who reloaded had to re-enter the course password *and* their KUID. Now the app puts an
+**opaque random token** in the URL (`?s=…`) backed by a `session_token` row. Deliberately not a
+signed token containing the KUID: that would put personal data into browser history and proxy
+logs in decodable form. Only the SHA-256 hash is stored, tokens expire (`SESSION_TTL_DAYS`,
+default 30), sign-out revokes, and a token from a closed year restores the gate but forces
+re-registration. §B2's "no per-student passwords" is untouched. **Known trade-off:** the URL is
+a bearer credential — sharing the link shares the session. That matches the honour-system model
+already in force, but it is a real property, not a detail.
+
+**Event logging.** The base spec's admin-only `audit` table is generalised into an `event` table
+covering every actor (`core/events.py`; `core/audit.py` deleted, so there is one log, not two).
+Recorded: registrations with timestamps, returning students, group creation, every submission,
+every **overwrite** (old values, new values, changed-field list), answers saved, exports
+actually taken, all admin actions, and all errors with tracebacks. Three sinks — the `event`
+table (Admin → Log, filterable, CSV export), **stdout** (AdaLab log viewer), and
+**`events.jsonl` on the volume** (survives redeploys, rotated at 5 MB).
+
+Two properties worth knowing:
+- **Logging can never break the app.** Sinks guard themselves *and* the call site guards them;
+  a test breaks both non-DB sinks and asserts a submission still succeeds. (That test found a
+  real gap — the call site was originally unguarded.)
+- **PII split.** DB and volume log keep the KUID (same DPA as the results); stdout gets a
+  pseudonymous `member:<id>` unless `LOG_PII=true`, because platform logs are aggregated wider.
+
+Exports are logged from the download button's `on_click`, never from the builders — Streamlit
+rebuilds button data on every rerun, so the naive placement would log phantom exports.
+
+Verified: `core/` still framework-free, container builds and both non-DB sinks confirmed
+working in-container.
+
+## 4c. Schema and export review (asked for after the logging work)
+
+A deliberate audit of the database schema and the export surface, which turned up **two
+integrity bugs** and four gaps. All fixed and pinned by tests.
+
+- **Registration had no database-level uniqueness.** `register()` was check-then-act with
+  nothing behind it, unlike group names. Two tabs could split one student across two `member`
+  rows — and their results with them. `Member` now carries a denormalised `cohort_id` with
+  `UniqueConstraint(cohort_id, kuid_key)`; a lost race returns the winning registration.
+  *(I could not reproduce the race — SQLite serialises writes — so this was a latent hole, not
+  an observed failure. Verified by inserting a duplicate directly and by 16 concurrent
+  registrations, which now yield exactly one row.)*
+- **Cross-year reassignment was possible — confirmed, not theoretical.** An admin could move a
+  student from 2026 into a 2027 group; their results stayed behind and every scope query broke.
+  Now refused with an explanation.
+- **No schema-evolution guard.** `create_all` adds missing tables but never ALTERs an existing
+  one, so a future column change would have surfaced mid-lab as a confusing SQL error. Added
+  `SCHEMA_VERSION` + a startup check that fails loud with instructions (`ALLOW_SCHEMA_MISMATCH=1`
+  overrides after a backup). Still no Alembic, per spec.
+- **Admin exports weren't logged** — the event log was quietly incomplete. Fixed.
+- **Answers and the roster were only reachable inside a PDF.** A teacher exporting a year for
+  grading got measurements and nothing else. Both are now exportable as data.
+- **Nothing took "everything".** Added a full workbook (results · answers · roster · years ·
+  log) and a **SQLite backup** using SQLite's backup API — a raw file copy under WAL can miss
+  committed transactions. §B5's premise is that apps get retired, so a take-everything button
+  belongs there.
+
+Verified: **106 tests**, container builds and the demo seed still works under the new
+constraint.
+
+## 5. Base spec §15 acceptance
+
+✅ verified · 🟡 partial/by-proxy · ⚪ needs a live AdaLab tenant · ➖ superseded
+
+1. **✅ `copier copy` defaults → container builds and runs** against an empty *mounted*
+   volume (an unmounted path now fails loud by design).
+2. **🟡 Two sessions submit concurrently, both visible.** Verified far beyond it in code:
+   60 concurrent sessions, all rows visible and correctly attributed. Not two literal browsers.
+3. **✅ Correction flow.** Supersede tested; latest-only view vs full history with a
+   `superseded` flag in exports.
+4. **✅ Admin lifecycle.** Wrong password rejected (constant-time, fail-closed when unset),
+   close year → writes rejected, open new year, old year still visible and exportable.
+5. **✅ Restart with the same volume: data intact** (SQLite + CSV mirror on the mount;
+   verified in-container, and by Addendum A's redeploy simulation in the previous pass).
+6. **✅ `DEMO_MODE=true` seeds two synthetic prior years**; verified in the container
+   (`[preflight] seeded demo years: 2024, 2025`, 33 CSV rows) and the cross-year box plot is
+   one of the reference plots.
+7. **✅ Agent test.** The guard blocks all 13 chassis paths and allows the 4 seam files
+   (matrix verified); a schema change flows to storage/CSV/exports/plots by construction.
+8. **✅ Brand check.** All hex lives in `core/theme.py` only (the old CI grep is replaced by a
+   single-source module + a plotly template); approved fill/ink pairs; Verdana stack; no
+   invented error colours (Streamlit's red/green/amber widgets are banned by rule and replaced
+   by `_components.notice`).
+9. **➖ Replaced** by §B10's Streamlit items (see §7).
+10. **✅ `pytest` green — 69 tests** on a fresh stamp.
+
+---
+
+## 6. Addendum A §A6 acceptance
+
+11. **✅ Builds/runs on 8000; `.adalab` matches §A2** — with the deliberate, documented
+    exception that **`stripped_prefix` is now `false`** (the §B1 finding) and `access_level` is
+    `public` (§B2). `uid: 1`, ports 8000, `volume_mounts: []`, `local_container_demo.json` and
+    `project.json` are unchanged from §A2.
+12. **✅ Missing/unwritable `DATA_DIR` fails loud, no silent fallback** — now enforced in the
+    entrypoint (see §4), verified in a real container plus two unit tests.
+13. **✅ `lost+found` / `.AVI_SUCCESS` filtered** wherever the app enumerates the volume
+    (`core/storage.list_volume_dir`, used by the admin export tab); tested.
+14. **✅ Redeploy simulation** (destroy container, rebuild with a new image tag, same mount,
+    data intact) — verified in the previous pass; the storage layer is unchanged by the
+    Streamlit switch and the current image was re-verified for start-up and volume layout.
+15. **➖ Replaced** by §B10's runtime-basepath item.
+16. **✅ Three guardrail layers consistent** — `permissions.deny`, the hook's `PROTECTED`, and
+    `CLAUDE.md` name the identical 13-path §B9 set (script-checked).
+17. **✅ README has the ASV runbook** (create → ACL → mount in lab → chown/chmod → Fast Mount
+    ON) **and the single-replica constraint**, plus Test → Build → Deploy.
+
+---
+
+## 7. Addendum B §B10 acceptance
+
+- **⚪/🟡 Hello-world Streamlit deploys on AdaLab and holds its websocket under the URL
+  prefix.** Not verifiable here (no tenant). Proven on a local equivalent through a proxy hop:
+  101 handshake, session held, static assets and health all resolve under the prefix. See §1.
+- **✅ `core/` imports and its tests pass with no Streamlit installed.** See §3.1.
+- **✅ Concurrency: 60 simultaneous sessions, no error, no cross-session leakage.** See §3.2 —
+  and it caught a real bug.
+- **✅ Every plot in the reference app has a working "Show the code" panel whose code runs
+  standalone against an exported CSV.** See §3.2, executed in a clean subprocess.
+- **✅ Course gate rejects a wrong password, admits with the right one; app reachable without
+  an AdaLab account.** Gate logic tested (constant-time, fail-closed when unset); "reachable
+  without an account" is `access_level: "public"` in the manifest — the *manifest* is correct,
+  but the tenant behaviour is ⚪ unverifiable here.
+- **✅ Export produces all four formats; CSV columns identical across two cohorts.** CSV,
+  Excel, PDF (asserted to be a real `%PDF`), HTML (asserted to contain data, answers, plot and
+  its code); a dedicated test writes two different years and asserts identical headers.
+
+---
+
+## 8. Weakest parts (my honest read)
+
+1. **Everything tenant-dependent is unverified** — the real AdaLab websocket path, whether the
+   proxy forwards the prefix, `access_level: "public"` actually admitting anonymous students,
+   the ASV chmod/Fast-Mount runbook, and the Gallery card. My §B1 finding *predicts* the config
+   AdaLab needs; a 20-minute hello-world deploy on a real tenant would confirm or refute it and
+   is worth doing before anything else.
+2. **No Streamlit UI tests.** `pages/*` and `app.py` are verified only by import + the
+   container smoke test. Session-state behaviour (the gate, the correction flow, the scope
+   selector) is exercised through `core` and by hand, not by AppTest. Streamlit ships
+   `streamlit.testing.v1.AppTest`; that is the obvious next test layer and I did not build it.
+3. **The concurrency test models sessions as threads**, which matches Streamlit's real
+   execution model, but it drives `core` directly rather than 60 browser websockets. It found a
+   genuine bug, so it has real value — but a true 60-websocket load test would be stronger.
+4. **PDF reports depend on kaleido 0.2.1** (pinned deliberately: kaleido ≥1.0 changes the API
+   and fetches Chromium at runtime). It emits a deprecation warning and is a future
+   maintenance point. If kaleido fails, the PDF still renders with a "see the HTML report"
+   placeholder instead of images — degraded, not broken.
+5. **The `neighbour` scope is a convention I chose** (cyclically adjacent group in the same
+   hold), because §B4 names the scope without defining adjacency. Trivial to change, but it is
+   a guess about how the lab is actually organised.
+6. **Answers are stored per group and questions are parsed from `content.md`.** If a teacher
+   reorders the question list, existing answers keep their `q1..qN` ids and will attach to the
+   new wording. A stable explicit id syntax would be safer.
+7. **`.streamlit/config.toml` repeats four palette hex values** because Streamlit's own theming
+   needs literals — the only place CPDSE colours exist outside `core/theme.py`. Documented in
+   the file; a drift risk if someone edits one and not the other.
+
+---
+
+## 9. What I'd do next
+
+- **Deploy the hello-world to a real tenant** and confirm/refute the `stripped_prefix: false` +
+  `baseUrlPath` finding, then the full app; this unblocks every ⚪ item.
+- Add **`AppTest`-based UI tests** for the gate, registration, capture→supersede and the scope
+  selector — the biggest coverage gap.
+- Add a **second worked seam** (a non-chemistry exercise) plus CI that stamps, tests and builds
+  both, proving the seam really is the only per-app surface.
+- Wire **lmfit** into the reference exercise (it is in the stack per §B8 but the logP example
+  doesn't need a fit yet) so the fitting pattern is demonstrated with a "Show the code" panel.
+- Move to **kaleido ≥1.0** once its Chromium fetch can be baked into the image offline.
+- Consider promoting `core/` to an installable shared library once a second app exists — the
+  no-streamlit guarantee is what makes that possible, so keep the test.
 
 ---
 
 ## 10. Publishing note
 
-The stamped app is turned into its own git repo by a copier `_task` (`git init -b main`).
-The **template** itself is a plain directory (not git-initialised — I avoided a nested repo
-in your tree, and commits are gated on your say-so). To publish: `git init` inside
-`lab-exercise-app-template/`, commit, tag `v0.1.0`, push to `gh:cpdse/lab-exercise-app-template`.
+The stamped app is turned into its own git repo by a copier `_task`. The template itself is a
+plain directory (not git-initialised here; commits are gated on your say-so). Note the earlier
+React version of this template was proposed to `adamatics/app_coding_templates` as
+[PR #3](https://github.com/adamatics/app_coding_templates/pull/3) — **that PR is now
+superseded by this Streamlit rewrite** and should be closed or force-updated before anyone
+merges it.
 
-**Placeholder assets:** the CPDSE logos in `frontend/src/assets/` and
-`frontend/public/favicon.svg` are placeholders in the correct colourways. Replace with the
-official CPDSE logo package before real use (also noted in the stamped app's README).
+**Placeholder assets:** the CPDSE logo is drawn inline in `pages/_components.py` in the correct
+colourway. Replace with the official CPDSE logo package before real use.

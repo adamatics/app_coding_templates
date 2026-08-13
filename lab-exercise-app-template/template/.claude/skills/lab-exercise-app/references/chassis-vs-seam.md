@@ -1,52 +1,50 @@
-# Chassis vs. seam
+# Chassis vs. seam (Streamlit architecture, Addendum B)
 
-The **seam** is the only per-app code. The **chassis** is identical in every app in the
-family and is protected from edits.
+```
+core/       framework-free Python — imports streamlit NOWHERE
+pages/      thin Streamlit chassis UI
+exercise/   THE SEAM (Python; may use streamlit)
+app.py      entry point, course gate, navigation
+```
 
 ## The seam (edit these)
 
 | File | What it is |
 | --- | --- |
-| `exercise/schema.py` | The `Measurement` Pydantic model — one measurement submission |
-| `exercise/analysis.py` | Optional `summarize(df) -> dict` for derived statistics |
-| `exercise/content.md` | The Home-page instructions (Markdown) |
+| `exercise/schema.py` | The `Measurement` model. Framework-free (core imports it). Drives storage, CSV and export columns. |
+| `exercise/capture.py` | The **data entry page**. `render_form(defaults)` returns a payload dict or `None`; optional `render_intro()` shows "what to enter here" above the form. Its header explains the contract — read it before editing. |
+| `exercise/analysis.py` | The **analysis page**. `build_plots(own_df, compare_df, source)` returning `[{"title","figure","code"}]`, built with `core.plots` so every plot keeps its "Show the code" panel. Its header explains how to choose plots. |
+| `exercise/content.md` | Instructions + the list under `## Analysis questions` (rendered with answer fields). |
 
 ## The chassis (do NOT edit — the guard blocks these)
 
-`backend/app/**`, the frontend chassis (`frontend/src/App.tsx`, `main.tsx`, `api.ts`,
-`metaContext.ts`, `global.d.ts`, `ui.css`, `lib/**`, `components/**`, `pages/**`,
-`assets/**`, `vite.config.ts`, `tsconfig.json`, `index.html`, `scripts/**`),
-`.adalab/app.json`, `.adalab/project.json`, `.adalab/card.json`, `.vscode/**`,
-`Containerfile`, `.claude/settings.json`, `.claude/hooks/**`. The full list is in
-`.claude/CLAUDE.md` and enforced by the `chassis_guard` hook.
+`core/**`, `pages/**`, `app.py`, `.adalab/{app,project,card}.json`, `.vscode/**`,
+`Containerfile`, lockfiles, `.claude/settings.json`, `.claude/hooks/**`.
 
-**Editable with confirmation** (permissions.ask, not blocked): `frontend/src/theme.css`
-(CPDSE identity — palette tokens only, never add hex elsewhere),
-`.adalab/local_container_demo.json`, and dependency manifests/commands
-(`pyproject.toml`, `frontend/package.json`, `pip/npm install`).
+**Editable with confirmation:** `.adalab/local_container_demo.json`, `pyproject.toml`,
+`.streamlit/config.toml`, dependency-add commands.
 
 ## You want X → edit Y
 
 | You want to… | Edit |
 | --- | --- |
 | Add / remove / rename a measurement field | `exercise/schema.py` |
-| Change a field's unit, range, or help text | `exercise/schema.py` (its `Field(...)`) |
-| Add a categorical dropdown | `exercise/schema.py` (`Literal["a","b"]`) |
-| Add a date field | `exercise/schema.py` (`datetime.date`) |
-| Make a field optional | `exercise/schema.py` (`X | None = Field(default=None, ...)`) |
-| Add an exercise-specific statistic to Results | `exercise/analysis.py` (`summarize`) |
-| Change the Home instructions | `exercise/content.md` |
-| Change the entry form layout | **nothing** — the form is generated from the schema |
-| Change the results table columns | **nothing** — columns follow the schema field order |
-| Add a chart series | **nothing** — numeric fields become chart candidates automatically |
-| Change export columns | **nothing** — export columns are the schema fields + cohort/group/submitted/superseded |
+| Change units, ranges, help text | `exercise/schema.py` (`Field(...)`) |
+| Change what the input form looks like | `exercise/capture.py` |
+| Add or change a plot | `exercise/analysis.py` (use `core.plots`) |
+| Change instructions or questions | `exercise/content.md` |
+| Change the CSV/export columns | **nothing** — they follow the schema |
+| Change the "Show the code" panel | **nothing** — `core.plots` emits it |
+| Change identity, gate, cohorts, storage, export formats | **nothing** — chassis |
 
 ## Why it's built this way
 
-Apps in this family must be visually and behaviourally indistinguishable except for their
-content, and their data must stay comparable across years. Letting anyone edit the chassis
-per app would produce exactly the drift the family exists to prevent. So the chassis is
-frozen and everything the exercise needs is expressed once, in the schema.
+CPDSE scientists will own eight or more of these apps for years, so the per-app surface is
+Python they can maintain. Everything else is frozen so the apps stay a family: identical
+identity, durability rules, visual identity and exports.
+
+`core/` is framework-free because it is the seed of the shared library later apps will depend
+on — a stray `import streamlit` there defeats that, and the test suite fails on it.
 
 ## If you truly need a chassis change
 

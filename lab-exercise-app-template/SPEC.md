@@ -1,121 +1,128 @@
 # SPEC — `lab-exercise-app-template`
 
-Authoritative spec for working on **this template's source** (per REPO_SPEC §10). The full
-requirements are in `Lab_Exercise_App_Template_Spec.md` (base) and
-`Lab_Exercise_App_Template_Addendum_A.md` (AdaLab conventions + persistence; wins on
-conflict). `DECISIONS.md` records ambiguous calls; `HANDOVER.md` is the build report and
-acceptance results.
+Authoritative spec for working on **this template's source** (per REPO_SPEC §10). Full
+requirements live in `Lab_Exercise_App_Template_Spec.md` (base),
+`..._Addendum_A.md` (AdaLab conventions + persistence) and `..._Addendum_B.md` (the Streamlit
+switch); **later documents win on conflict**. `DECISIONS.md` records ambiguous calls;
+`HANDOVER.md` is the build report and acceptance results.
 
 ## Purpose
 
 Stamp out CPDSE (Center for Pharmaceutical Data Science Education) student lab-exercise apps.
-Each stamped app serves **one** lab exercise: student groups record measurements, and results
-persist across cohorts (years) for statistical comparison. Apps are visually and behaviourally
-identical (the **chassis**) and differ only in the **exercise seam**.
+Each app serves **one** lab exercise: student groups record measurements, compare against the
+class and previous years, and export a report they keep. Apps are a family — identical
+chassis, per-course seam.
 
 ## Stack (fixed)
 
-- Backend: Python **3.11**, FastAPI, uvicorn, SQLite (WAL), SQLAlchemy 2.x, Pydantic v2.
-- Frontend: React 18 + Vite + TypeScript, built to static and served by the **same** FastAPI
-  process. One container, one process, **port 8000**.
-- Persistence: single SQLite file under `DATA_DIR` (default `/asv-mnt/lab-data`), an AdaLab
-  Shared Volume. No database server. No Alembic (`create_all` at startup).
+Python **3.11**, **Streamlit** (single process, single container, **port 8000**), pandas,
+plotly, lmfit, SQLAlchemy 2, Pydantic v2, SQLite (WAL), reportlab (PDF), openpyxl (Excel).
+No Node, no separate API, no database server, no Alembic.
 
-## AdaLab constraints (Addendum §A1, §A3)
+## Architecture (non-negotiable, Addendum §B1)
 
-- `Containerfile` (never `Dockerfile`); multi-stage (Node 20 build → `python:3.11-slim`).
-- `.adalab/` = `project.json`, `app.json`, `local_container_demo.json` (`uid: 1`,
-  `stripped_prefix: true`, `port`/`test_serving_port` 8000, `volume_mounts: []`), plus
-  `.vscode/settings.json` = `{"adalab.workingMode": "appBuilder"}`.
-- **Base path resolved at runtime in the frontend** (`frontend/src/lib/basepath.ts` from
-  `window.location.pathname`); AdaLab strips the `/apps/<slug>/` prefix, so the backend serves
-  at root. No `BASE_PATH` env var.
-- **Fail-loud storage:** the app never creates `DATA_DIR`; a missing/unwritable volume stops
-  startup with the path + mount fix. Never silently fall back to container-local storage.
-- Single-replica (WAL); ASV **Fast Mount** required; `lost+found` and `.AVI_SUCCESS` filtered
-  wherever the app enumerates volume contents; non-SQLite volume writes are atomic
-  (temp-then-`replace`).
+```
+core/       framework-free Python — imports streamlit NOWHERE (a test enforces it)
+pages/      thin Streamlit chassis UI
+exercise/   THE SEAM — schema.py, capture.py, analysis.py, content.md
+assets/     brand artwork (CPDSE logo)
+app.py      entry point, course gate, navigation
+```
+
+`core/` is the seed of the shared library later apps will depend on, which is why the
+no-streamlit rule is tested three ways. `exercise/schema.py` is imported by `core/`, so it
+must stay framework-free too.
+
+## AdaLab constraints (§A1, §A3, §B1)
+
+- `Containerfile` (never `Dockerfile`); single stage on `python:3.11-slim`.
+- `.adalab/` = `project.json`, `app.json`, `local_container_demo.json` (`uid: 1`, ports 8000,
+  `volume_mounts: []`), plus `.vscode/settings.json`.
+- **`stripped_prefix: false`** + `--server.baseUrlPath` — Streamlit needs the URL prefix on
+  incoming requests. This is a deliberate divergence from Addendum A, found by the §B1
+  deployment check; see HANDOVER §1.
+- **`access_level: "public"`** — students have no AdaLab accounts; the course password is the gate.
+- **Fail-loud storage:** the app never creates `DATA_DIR`; `core/preflight.py` runs *before*
+  Streamlit and exits non-zero if the volume is missing or unwritable.
+- Single replica (WAL). ASV **Fast Mount** required. `lost+found` / `.AVI_SUCCESS` filtered.
+  Non-SQLite volume writes are atomic.
 
 ## The seam (the only per-app code)
 
-```
-exercise/schema.py     one Pydantic model `Measurement`  → form, table, chart, export all follow
-exercise/analysis.py   optional summarize(df) -> dict
-exercise/content.md    Home-page instructions
-```
+| File | What it is |
+| --- | --- |
+| `exercise/schema.py` | The `Measurement` model. Framework-free. Drives storage, CSV and every export. |
+| `exercise/capture.py` | The **data entry page**: `render_form(defaults)` → payload dict; optional `render_intro()`. |
+| `exercise/analysis.py` | The **analysis page**: `build_plots(own_df, compare_df, source)` using `core.plots`. |
+| `exercise/content.md` | Instructions + the `## Analysis questions` list (rendered with answer fields). |
 
-Changing an exercise = editing these three files only. The chassis derives the entry form
-(`SchemaForm`), the results table, chart candidates (numeric fields) and the export columns
-from the JSON Schema of `Measurement`.
+Both page files ship as **annotated teaching templates** — a teacher (usually with an agent)
+rewrites them per course, so the file itself explains its purpose and contract.
 
-## Data model (chassis; durability is load-bearing)
+## Identity and data model
 
-`cohort` (one `open` at a time) · `group` (unique per cohort, case-insensitive) · `member` ·
-`result` (JSON `payload`, `superseded_by`, `deleted_at`) · `audit`. Rules: **append-only**
-(students never edit/delete; corrections *supersede*); **reset = close a cohort + open a new
-one**, never delete; writes to a closed cohort are 409; hard-delete is admin-only, single-row,
-audited. Export columns = schema fields + `cohort, group, submitted_at, superseded`, stable
-across years.
+**Individual (KUID) → Group (carries hold) → Hold → Year**, behind a course-password gate
+(`COURSE_ID`/`COURSE_PASSWORD`). No student accounts, no per-student passwords. Durable
+browser sessions via an opaque token in the URL (`session_token` table).
 
-## Protected zones (three-layer guardrail — Addendum §A4)
+Tables: `cohort` (year, one open) · `group` · `member` (unique KUID per cohort) · `result`
+(append-only, `superseded_by`, `deleted_at`) · `answer` · `setting` · `document` ·
+`session_token` · `event`.
 
-The seam `exercise/**` is the only always-writable zone. Chassis is protected by a single
-set named identically in three layers (`.claude/settings.json` `permissions.deny`, the
-`chassis_guard.py` `PROTECTED` list, and `.claude/CLAUDE.md`): `backend/app/**`, the frontend
-chassis (`App.tsx`, `main.tsx`, `api.ts`, `metaContext.ts`, `global.d.ts`, `ui.css`, `lib/**`,
-`components/**`, `pages/**`, `assets/**`, `vite.config.ts`, `tsconfig.json`, `index.html`,
-`scripts/**`), `.adalab/{app,project,card}.json`, `.vscode/**`, `Containerfile`,
-`.claude/settings.json`, `.claude/hooks/**`. **Ask** (editable with confirmation):
-`frontend/src/theme.css`, `.adalab/local_container_demo.json`, dependency manifests/commands.
-The hook (real enforcement) exits 2 to block edits and dangerous Bash.
+Rules: **append-only** (corrections supersede); **reset = close the year, never delete**;
+writes to a closed year are 409; hard delete is admin-only, one row, audited. Export columns
+are stable across years. `SCHEMA_VERSION` guards chassis schema changes at startup.
 
-## `.claude/` (stamped into every app)
+## Logging
 
-`CLAUDE.md` (chassis/seam intent), `settings.json` (deny/ask + PreToolUse `chassis_guard.py`,
-PostToolUse `format.py` (ruff/prettier), SessionStart `session_start.py`), `hooks/`,
-`rules/*.md`, the `lab-exercise-app` skill (+ `chassis-vs-seam`, `schema-cookbook`,
-`data-model` references), and the `/new-exercise-field` command.
+`core/events.py` records registrations, submissions, overwrites (old + new values), exports,
+admin actions and errors to three sinks: the `event` table (Admin → Log), stdout, and
+`events.jsonl` on the volume. Logging can never break the app. stdout is pseudonymous unless
+`LOG_PII=true`.
+
+## Protected zones (three-layer guardrail, §B9)
+
+`core/**`, `pages/**`, `app.py`, `assets/**`, `.adalab/{app,project,card}.json`, `.vscode/**`,
+`Containerfile`, lockfiles, `.claude/settings.json`, `.claude/hooks/**` — named identically in
+`permissions.deny`, the hook's `PROTECTED` list, and `CLAUDE.md`. **Ask** tier:
+`.adalab/local_container_demo.json`, `pyproject.toml`, `.streamlit/config.toml`, dependency
+commands. Only `exercise/**` is always writable.
 
 ## Copier questions
 
-`project_name`, `project_slug` (derived), `exercise_title`, `course_code`, `host_institution`
-(SDU|UCPH|CPDSE, footer only), `contact_email`, `default_cohort_label`, `app_description`.
-**No colour/logo questions** — the CPDSE identity is fixed (spec §4, §13).
+`project_name`, `project_slug`, `exercise_title`, `course_code`, `app_description`,
+`host_institution`, `contact_email`, `default_cohort_label`. **No colour or logo questions.**
 
 ## Definition of Done
 
-Base spec §15 (1–10) and Addendum §A6 (11–17). Summary of current status is in `HANDOVER.md`:
-all locally verifiable items pass (41 pytest, container build on 3.11, fail-loud, restart +
-new-image-tag redeploy persistence, three-layer guardrail consistency, brand no-hex check);
-items needing a live AdaLab tenant (the `/apps/<slug>/` deploy, card deploy, ASV runbook) are
-marked as such.
+Base spec §15, Addendum A §A6, Addendum B §B10 — results in `HANDOVER.md`. The three
+load-bearing checks: `core/` imports with no Streamlit installed; every plot's "Show the code"
+runs standalone against an exported CSV; 60 simultaneous sessions submit with no errors and no
+cross-session leakage. **122 tests** at time of writing.
 
-## Build order
+## Testing
 
-Data layer + tests → public API → admin auth/API → frontend shell + theme + Groups/EnterResults
-→ Results/compare → export → demo seed → Containerfile + basepath → agent guidance + hook →
-worked example seam → acceptance run. (Base spec §16.)
+```bash
+copier copy app_coding_templates/lab-exercise-app-template /tmp/test-1 --trust
+cd /tmp/test-1 && DATA_DIR=$(mktemp -d) python -m pytest -q
+podman build -t test-1 . && mkdir -p ./lab-data
+podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e COURSE_PASSWORD=x -e ADMIN_PASSWORD=y test-1
+```
 
 ## Divergences from REPO_SPEC (intentional — for maintainer review)
 
-This template implements the CPDSE spec, which differs from the monorepo's per-prospect demo
-conventions. Flagged so a maintainer can decide whether to reconcile:
-
 - **Branding is FIXED, not per-prospect.** The CPDSE spec (§4, §13) forbids colour/logo
-  questions and fixes the identity in `frontend/src/theme.css`. There is no
-  `frontend/public/logo.svg` / `frontend/src/styles/tokens.css` branding contract and no
-  `_skip_if_exists` on those. `_skip_if_exists` protects `theme.css` instead.
-- **Question names are domain-specific** (`project_name`/`exercise_title`/… rather than
-  `prospect_name`); `app_description` is present as REPO_SPEC requires.
-- **Guardrail hook is `chassis_guard.py`** (not `protect_paths.py`), and there are **no
-  `business-logic-implementer` / `security-reviewer` subagents** yet; rules are in
-  `.claude/rules/` but not path-scoped via frontmatter. Stamp-time logic uses copier `_tasks`
-  (chmod + `git init`) rather than `hooks/post_gen.py`.
-- **Data model is the exercise domain** (cohorts/groups/members/results), not
-  Departments/Employees/Projects.
-- **Stamping form.** `REPO_SPEC.md` documents `copier copy ... --directory <template>`, but
-  `--directory` is a *cookiecutter* flag — Copier ≥ 9 has no such option and no remote
-  monorepo-subdir selection. The working form is to clone the repo and point Copier at the
-  template subdirectory (`copier copy app_coding_templates/lab-exercise-app-template <out>
-  --trust`). A maintainer may want a root `copier.yml` or a wrapper to restore a one-liner;
-  flagged rather than silently diverged.
+  questions; the identity lives in `core/theme.py` with artwork in `template/assets/`. There is
+  no `logo.svg`/`tokens.css` branding contract; `_skip_if_exists` protects `core/theme.py` and
+  `assets/*` instead.
+- **Domain question names** (`project_name`/`exercise_title`/…) rather than `prospect_name`;
+  `app_description` is present as REPO_SPEC requires.
+- **Guardrail hook is `chassis_guard.py`** (not `protect_paths.py`); **no subagents** yet;
+  rules are in `.claude/rules/` and path-scoped via frontmatter. Stamp-time logic uses copier
+  `_tasks` rather than `hooks/post_gen.py`.
+- **Stack is Streamlit, not FastAPI + React** — Addendum B, so CPDSE scientists can own the
+  seam in Python.
+- **Stamping form:** REPO_SPEC documents `copier copy … --directory <template>`, but
+  `--directory` is a *cookiecutter* flag; Copier ≥ 9 has no such option. The working form is to
+  clone and point Copier at the subdirectory. A maintainer may want a root `copier.yml` or a
+  wrapper to restore a one-liner.

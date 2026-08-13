@@ -1,28 +1,24 @@
-# Welcome
+# logP: measure, look up, compare
 
-This is a safe space to learn data science. In this exercise you will measure the
-**absorbance** of a set of samples and record your readings here so the whole class can
-compare results — this year and against previous years.
+Welcome — this is a safe space to learn data science. In this exercise your group measures the
+**logP** (the octanol–water partition coefficient) of a set of compounds and compares your
+numbers with a public database, an external prediction tool, and other groups.
 
-## What you will do
+## What you'll do
 
-1. **Make a group.** Go to **Groups**, add your names, and create a group. No password,
-   no login — picking your group from the list later is how the app knows it's you.
-2. **Take your readings.** For each sample, note the buffer, temperature, absorbance at
-   540 nm, dilution factor and replicate number.
-3. **Enter your results.** Go to **Enter results**, choose your group, and fill in the
-   form once per reading. You'll see your values echoed back so you can check them.
-4. **Explore.** On **Results** you can see every group's latest readings, switch to
-   *All years* to compare with previous cohorts, and download a CSV for your own analysis.
+1. **Register** with your KUID, your name, and your hold, then join or create a group.
+2. For each compound: **look up** its logP in a public database (e.g. PubChem), **get** a value
+   from an external prediction tool, **measure** your own value, and **ask a neighbouring group**
+   for theirs. Enter all four on the **Data capture** page.
+3. On **Data analysis**, build the combined table, see how your values compare, answer the
+   questions below, and **export a report** you can keep and hand in.
 
-## A few tips
+You can come back weeks later while writing your report — classmates working at a different
+pace may not have submitted yet, and that's fine.
 
-- **Units matter.** Temperature is in °C, absorbance in AU. The form tells you the
-  expected range for each field — if something is outside it, the form will say so.
-- **Made a mistake?** You can't edit or delete a reading (that keeps everyone's data
-  trustworthy). Instead, submit a **correction** from the Results page — it replaces your
-  earlier reading while keeping an honest record that a change was made.
-- **Replicates.** Enter each replicate as its own reading, numbered 1, 2, 3…
+## Analysis questions
 
-Have fun, and don't worry about getting a "perfect" number — spread in the data is exactly
-what we're here to look at.
+1. How well does your measured logP agree with the database value? Where does it disagree most, and why might that be?
+2. Is the external tool's prediction closer to the database or to your measurement?
+3. How does your group's spread compare with the rest of the class (and previous years)?
+4. If you measured one compound again, what would you change to reduce the difference?

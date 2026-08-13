@@ -9,12 +9,13 @@ import sys
 
 def main() -> None:
     sys.stdout.write(
-        "🛡️  Guardrails are active for this lab-exercise app.\n"
-        "This is a chassis/seam template: the CHASSIS (backend, frontend, deploy config) is\n"
-        "protected by a PreToolUse hook and never edited per app. To change the exercise,\n"
-        "edit ONLY the seam:\n"
-        "  exercise/schema.py   exercise/analysis.py   exercise/content.md\n"
-        "The form, results table, charts and export columns all follow from schema.py.\n"
+        "🛡️  Guardrails are active for this lab-exercise app (Streamlit).\n"
+        "Chassis/seam split: core/ (framework-free — imports streamlit NOWHERE), pages/ and\n"
+        "app.py are CHASSIS and protected by a PreToolUse hook. To change the exercise, edit\n"
+        "ONLY the seam:\n"
+        "  exercise/schema.py  exercise/capture.py  exercise/analysis.py  exercise/content.md\n"
+        "Storage, CSV/exports and the anonymised comparison follow from the schema; build\n"
+        "plots with core.plots so each gets its 'Show the code' panel.\n"
         "See .claude/CLAUDE.md and the lab-exercise-app skill. Run /new-exercise-field to add\n"
         "a measurement field.\n"
     )

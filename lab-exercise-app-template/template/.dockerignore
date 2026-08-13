@@ -1,15 +1,14 @@
 # Keep the build context small and prevent stale local artifacts from leaking in.
-**/node_modules
-frontend/dist
-backend/app/static
 **/__pycache__
 **/*.pyc
 .venv
 venv
 .pytest_cache
+.ruff_cache
 .git
-data
+tests
 lab-data
+data
 *.sqlite
 *.sqlite-*
 .copier-answers.yml

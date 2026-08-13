@@ -1,11 +1,11 @@
 ---
 name: lab-exercise-app
 description: >
-  Adapt this CPDSE lab-exercise app to a new or changed exercise. Use whenever the request
-  is to add/remove/change a measurement field, change the entry form, add a chart or
-  analysis, or edit the exercise instructions. Triggers: "add a field", "add a pH field",
-  "change the measurement", "add a dropdown/date/notes field", "compute a statistic",
-  "change the instructions", "adapt this app to <exercise>".
+  Adapt this CPDSE Streamlit lab-exercise app to a new or changed exercise. Use whenever the
+  request is to add/remove/change a measurement field, change the capture form, add a plot or
+  analysis, or edit the exercise instructions and questions. Triggers: "add a field", "add a
+  pH field", "change the form", "add a plot", "compute a statistic", "change the instructions",
+  "adapt this app to <exercise>".
 ---
 
 # Adapting a lab-exercise app
@@ -16,42 +16,52 @@ seam and let the chassis follow.
 
 ## The one rule
 
-**Edit only these three files:**
+**Edit only `exercise/**`:**
 
-- `exercise/schema.py` — the `Measurement` Pydantic model (the single source of truth)
-- `exercise/analysis.py` — optional `summarize(df)` for exercise-specific statistics
-- `exercise/content.md` — the Home-page instructions
+- `exercise/schema.py` — the `Measurement` model (framework-free; `core/` imports it)
+- `exercise/capture.py` — the Streamlit input UI for this exercise
+- `exercise/analysis.py` — the exercise's plots, built with `core.plots`
+- `exercise/content.md` — instructions and the `## Analysis questions` list
 
-Everything else is chassis and is protected by a hook (`chassis_guard`) and by
-`permissions.deny`. The entry form, the results table, the chart candidates and the export
-columns are all **derived from `Measurement` at runtime**. Add a field to the schema and it
-appears everywhere automatically — you do not (and must not) hand-edit the form, table,
-charts, or export.
+Everything else is chassis, protected by a hook and by `permissions.deny`. Storage, CSV/export
+columns, identity, the course gate, cohorts, anonymised comparison and the four export formats
+are all derived or provided — you do not rebuild them.
 
-## Workflow for "add / change a field"
+## Workflow: "add / change a field"
 
-1. Open `exercise/schema.py`.
-2. Add or edit a field on `Measurement`, giving it a type, a range (`ge`/`le` where it
-   makes sense), a unit in the `description`, and marking it optional if appropriate.
-3. That's it. Do not touch the frontend or backend. Confirm by running the app: the field
-   shows up in **Enter results**, **Results**, the chart series list (if numeric), and the
-   CSV/Parquet export.
+1. Edit `exercise/schema.py` (type, range, unit in the `description`, optional if appropriate).
+2. Add the matching input to `exercise/capture.py` so students can enter it (return it in the
+   payload dict; the chassis validates against the schema).
+3. That's it. Storage, the results table, the CSV mirror and all four exports pick it up.
 
 Run `/new-exercise-field` to do this interactively.
 
+## Workflow: "add a plot"
+
+Add it to `exercise/analysis.py` using a `core.plots` helper:
+
+```python
+fig, code = plots.scatter(own_df, x="database_logp", y="measured_logp", color="method",
+                          title="Measured vs database", source=source)
+out.append({"title": "Measured vs database", "figure": fig, "code": code})
+```
+
+The helper returns the figure **and** the standalone pandas+plotly code; the chassis renders
+that in a "Show the code" panel. Never hand-build a plotly figure — students lose the panel,
+which is a teaching requirement (§B7), and the test suite checks the code runs standalone.
+
 ## References
 
-- `references/chassis-vs-seam.md` — the exact boundary and a "you want X → edit Y" map.
-- `references/schema-cookbook.md` — field patterns (numeric+units, dropdowns, dates,
-  replicates, free-text) and what makes a good example schema.
-- `references/data-model.md` — cohort / append-only / supersede semantics. **Read this
-  before doing anything with data**, so you never invent a parallel persistence path.
+- `references/chassis-vs-seam.md` — the boundary and a "you want X → edit Y" map.
+- `references/schema-cookbook.md` — field patterns and what makes a good schema.
+- `references/data-model.md` — identity, cohort and supersede semantics. **Read before doing
+  anything with data**, so you never invent a parallel persistence path.
 
 ## What NOT to do
 
-- Do not add student accounts, passwords, cookies, or a database server (see the app's
-  non-goals). Identification is by group selection, on the honour system.
+- Do not import streamlit in `core/**` or `exercise/schema.py` (a test enforces this).
+- Do not add per-student passwords or accounts; the course password is the gate.
 - Do not add a way to edit or delete results. Corrections **supersede**; resets **close a
-  cohort**. Nothing is ever destroyed.
-- Do not introduce colours outside `frontend/src/theme.css` or invent an error red/amber —
-  the CPDSE palette has none. (You shouldn't be in the frontend at all.)
+  year**. Nothing is ever destroyed.
+- Do not use `st.error`/`st.success`/`st.warning` (off-palette) or hard-code hex colours;
+  use `pages._components.notice` and `core.theme`.

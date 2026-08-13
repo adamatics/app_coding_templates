@@ -3,28 +3,42 @@
 A [Copier](https://copier.readthedocs.io/) template for **student lab-exercise apps**
 for the Center for Pharmaceutical Data Science Education (CPDSE).
 
-Every app stamped from this template serves **one** lab exercise. Student groups record
-their measurements; results persist across years for statistical comparison. All apps look
-and behave identically (the *chassis*) and differ only in the exercise-specific parts (the
-*seam*): the measurement schema, the form derived from it, and the analysis/instructions.
+Every app stamped from this template serves **one** lab exercise. Student groups record their
+measurements; results persist across years for comparison. All apps look and behave
+identically (the *chassis*) and differ only in the exercise-specific parts (the *seam*).
 
 > One app = one exercise. The family pattern (many stamped apps) covers everything else.
 
 ## What you get
 
-- **FastAPI + SQLite (WAL)** backend, **React 18 + Vite + TypeScript** frontend, built to
-  static files and served by the *same* FastAPI process. One container, one process, one port.
-- **CPDSE visual identity** baked in (fixed — no colour/logo questions).
-- **Append-only, cohort-based persistence**: corrections supersede, "reset" closes a cohort
-  instead of deleting. No code path destroys historical data.
-- **Admin area** (single password from env), **CSV/Parquet export**, **demo data**.
-- **Agent guidance** (`CLAUDE.md`, a `lab-exercise-app` skill, a `/new-exercise-field`
-  command) and a **chassis-guard hook** that blocks edits outside the exercise seam.
+- A **single-process Streamlit app** (Python 3.11), one container, port 8000. No Node, no
+  separate API.
+- **Architecture that keeps the UI swappable:**
+
+  ```
+  core/       framework-free Python — imports streamlit NOWHERE (enforced by a test)
+  pages/      thin Streamlit chassis UI
+  exercise/   THE SEAM — schema.py, capture.py, analysis.py, content.md
+  app.py      entry point, course gate, navigation
+  ```
+
+- **CPDSE visual identity** baked in (fixed — no colour/logo questions), applied to both the
+  UI and every plot.
+- **Identity model**: individual (KUID) → group → hold → year, behind a course-password gate.
+  No student accounts, no per-student passwords.
+- **Append-only, cohort-based persistence**: corrections supersede, "reset" closes a year.
+  SQLite (system of record) + a long-format CSV mirror on a mounted AdaLab Shared Volume,
+  with fail-loud startup.
+- **"Show the code" panels**: every plot helper returns the figure *and* the standalone
+  pandas+plotly code that reproduces it from an exported CSV — a teaching requirement.
+- **Four exports**: CSV, Excel, PDF report, HTML report (data + answers + plots).
+- **Agent guidance** (`CLAUDE.md`, a `lab-exercise-app` skill, `/new-exercise-field`) and a
+  **three-layer guardrail** whose hook actually blocks edits outside the seam.
 
 ## Requirements
 
-- [Copier](https://copier.readthedocs.io/) ≥ 9 (`pipx install copier` or `pip install copier`)
-- To build/run a stamped app: Docker or Podman, or a local Python 3.11 + Node 18+ toolchain.
+- [Copier](https://copier.readthedocs.io/) ≥ 9 (`pipx install copier`)
+- To build/run a stamped app: Docker or Podman, or a local Python 3.11 toolchain.
 
 ## Stamp an app
 
@@ -36,62 +50,72 @@ git clone git@github.com:adamatics/app_coding_templates.git
 copier copy app_coding_templates/lab-exercise-app-template ./my-exercise --trust
 ```
 
-You will be asked a short list of questions (spec §4). The app is generated directly in
-`./my-exercise/`. Then (a writable volume MUST be mounted at `/asv-mnt/lab-data`):
+The app is generated directly in `./my-exercise/`. Then:
 
 ```bash
 cd my-exercise
-podman build -t my-exercise .          # or: docker build -f Containerfile -t my-exercise .
-podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e ADMIN_PASSWORD=change-me my-exercise
-# open http://localhost:8000
+podman build -t my-exercise .
+mkdir -p ./lab-data
+podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me my-exercise
+# open http://localhost:8000/my-exercise/
 ```
+
+Note the URL prefix: Streamlit is run with `--server.baseUrlPath`, and `.adalab/app.json` sets
+`stripped_prefix: false`, because Streamlit needs the prefix on incoming requests (verified —
+see `HANDOVER.md` §B1).
 
 ## Customising the exercise (the seam)
 
-Inside a stamped app you edit **only three files**:
+Inside a stamped app you edit **only these four files**:
 
 ```
-exercise/schema.py     # the Pydantic Measurement model — the single source of truth
-exercise/analysis.py   # optional exercise-specific derived statistics
-exercise/content.md    # the Home-page instructions
+exercise/schema.py     the Measurement model — drives storage, CSV and all exports
+exercise/capture.py    the Streamlit input form
+exercise/analysis.py   the plots, built with core.plots (each gets "Show the code")
+exercise/content.md    instructions + the analysis questions
 ```
 
-The results form, the results table, the chart candidates and the export columns **all
-follow from `schema.py` automatically**. You never touch the chassis. A `chassis_guard`
-hook enforces this by blocking writes to chassis files.
+You never touch the chassis; a `chassis_guard` hook enforces it.
 
 ### Template-maintainer escape hatch
 
-The chassis guard is meant to protect app authors from themselves. If **you** are editing
-the template's chassis (this repo), set `ALLOW_CHASSIS_EDIT=1` in your environment to disable
-the guard. This is intentionally documented only here, in the template README — not in the
-stamped app — so app authors don't discover an easy way around the seam boundary.
+If **you** are editing the template's chassis (this repo), set `ALLOW_CHASSIS_EDIT=1` to
+disable the guard. Documented only here, not in the stamped app.
+
+## Testing a stamped app
+
+```bash
+DATA_DIR=$(mktemp -d) python -m pytest -q      # 122 tests
+```
+
+The suite includes the three load-bearing checks: `core/` imports with **no streamlit
+installed**, every plot's "Show the code" **runs standalone** against an exported CSV, and
+**60 simultaneous sessions** submit without error or cross-session leakage.
 
 ## Template layout
 
 ```
 lab-exercise-app-template/
-├── copier.yml        # the questions (spec §4) + _subdirectory: template
-├── SPEC.md           # authoritative spec for building the template itself
+├── copier.yml        # the questions + _subdirectory: template
+├── SPEC.md           # authoritative spec for working on the template itself
 ├── README.md         # this file
-├── DECISIONS.md      # decisions taken where the spec was silent/ambiguous
-├── HANDOVER.md       # build report against the spec + addendum
+├── DECISIONS.md      # decisions taken where the specs were silent/ambiguous
+├── HANDOVER.md       # build report across the base spec + Addendum A + Addendum B
 └── template/         # the stamped app contents (rendered into the output path)
 ```
 
-## Design principles (from the spec)
+## Design principles
 
-1. **Chassis vs. seam.** The chassis is identical in every app and never edited per-app.
-   The seam (`exercise/`) is the only customization surface. This is enforced, not just
-   documented.
-2. **Data durability.** Append-only results with supersede semantics; cohort *close*, never
-   delete; closed cohorts stay fully queryable and exportable; export columns are stable
-   across years so cohorts concatenate directly.
-3. **One visual identity.** CPDSE branding is fixed in the chassis. No raw hex outside
-   `frontend/src/theme.css`; only the six approved fill/ink pairs; Verdana with declared
-   fallbacks.
+1. **Chassis vs. seam**, enforced not just documented. The seam is Python only, so CPDSE
+   scientists working with coding agents can own it for years.
+2. **`core/` is framework-free** — the seed of the shared library later apps will depend on.
+3. **Data durability**: append-only, close-never-delete, fail-loud storage, stable export
+   columns across years.
+4. **One visual identity**: CPDSE colours live only in `core/theme.py`.
 
-See `SPEC.md` for the full specification (and `DECISIONS.md` / `HANDOVER.md` for the build
-record). Note: unlike the monorepo's per-prospect templates, this template's CPDSE identity
-is **fixed** (no branding questions, no `logo.svg`/`tokens.css` swap) — that is a deliberate
-requirement of the CPDSE spec, called out in `SPEC.md`.
+See `SPEC.md` for how to work on the template, and `Lab_Exercise_App_Template_Spec.md`,
+`..._Addendum_A.md`, `..._Addendum_B.md` for the full specification (later documents win).
+Note: unlike the monorepo's per-prospect templates, this template's CPDSE identity is
+**fixed** (no branding questions) — a deliberate requirement of the CPDSE spec, with the
+artwork in `template/assets/`. See the divergences section of `SPEC.md`.

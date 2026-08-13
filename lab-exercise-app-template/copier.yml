@@ -14,10 +14,12 @@ _templates_suffix: .jinja
 _envops:
   keep_trailing_newline: true
 
-# A `copier update` must never clobber a teacher's identity edits to theme.css
-# (Addendum §A4). Paths are relative to the destination root.
+# A `copier update` must never clobber local identity/config edits (Addendum §A4).
+# Paths are relative to the destination root.
 _skip_if_exists:
-  - "frontend/src/theme.css"
+  - "core/theme.py"
+  - "assets/*"
+  - ".streamlit/config.toml"
   - ".copier-answers.yml"
 
 # Post-generation tasks (require --trust): make the hooks executable and turn the stamped
@@ -31,12 +33,13 @@ _message_after_copy: |
 
   Next steps:
     1. Read README.md (app usage) and .claude/CLAUDE.md (chassis/seam split).
-    2. Customise the exercise by editing ONLY these three files:
-         exercise/schema.py    exercise/analysis.py    exercise/content.md
+    2. Customise the exercise by editing ONLY the seam:
+         exercise/schema.py   exercise/capture.py   exercise/analysis.py   exercise/content.md
     3. Build & run (a writable volume MUST be mounted at /asv-mnt/lab-data):
          podman build -t {{ project_slug }} .        # or: docker build -f Containerfile -t {{ project_slug }} .
          podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
-           -e ADMIN_PASSWORD=change-me {{ project_slug }}
+           -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
+       then open http://localhost:8000/{{ project_slug }}/
 
 # ---------------------------------------------------------------------------
 # Questions

@@ -1,0 +1,91 @@
+"""Runtime configuration (CHASSIS, framework-free — imports streamlit NOWHERE).
+
+Stamped identity is injected once by Copier; deployment values come from the environment.
+Per Addendum B §B6 every course app shares one AdaLab Shared Volume mounted at ``DATA_DIR``
+and owns a per-app subdirectory under it, so a KUID's history across apps stays reachable.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+DEFAULT_PORT = 8000
+# The shared ASV mount (Addendum A/B). Each app owns a subdirectory under it.
+DEFAULT_DATA_DIR = "/asv-mnt/lab-data"
+
+INSTITUTION_NAMES = {
+    "SDU": "University of Southern Denmark (SDU)",
+    "UCPH": "University of Copenhagen (UCPH)",
+    "CPDSE": "Center for Pharmaceutical Data Science Education (CPDSE)",
+}
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    return default if raw is None else raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class Settings:
+    # --- stamped identity (Copier), env-overridable -------------------------
+    project_name: str = os.environ.get("PROJECT_NAME", {{ project_name | tojson }})
+    project_slug: str = os.environ.get("PROJECT_SLUG", {{ project_slug | tojson }})
+    exercise_title: str = os.environ.get("EXERCISE_TITLE", {{ exercise_title | tojson }})
+    course_code: str = os.environ.get("COURSE_CODE", {{ course_code | tojson }})
+    host_institution: str = os.environ.get("HOST_INSTITUTION", {{ host_institution | tojson }})
+    contact_email: str = os.environ.get("CONTACT_EMAIL", {{ contact_email | tojson }})
+    default_year: str = os.environ.get("DEFAULT_COHORT_LABEL", {{ default_cohort_label | tojson }})
+    app_description: str = os.environ.get("APP_DESCRIPTION", {{ app_description | tojson }})
+
+    # --- deployment env -----------------------------------------------------
+    data_dir: Path = field(default_factory=lambda: Path(os.environ.get("DATA_DIR", DEFAULT_DATA_DIR)))
+    # Course gate (Addendum B §B2): rotated per semester at deploy time.
+    course_id: str = field(default_factory=lambda: os.environ.get("COURSE_ID", os.environ.get("COURSE_CODE", {{ course_code | tojson }})))
+    course_password: str | None = os.environ.get("COURSE_PASSWORD") or None
+    admin_password: str | None = os.environ.get("ADMIN_PASSWORD") or None
+    demo_mode: bool = field(default_factory=lambda: _env_bool("DEMO_MODE", False))
+    app_port: int = field(default_factory=lambda: int(os.environ.get("APP_PORT", str(DEFAULT_PORT))))
+    # How long a browser session survives (so a refresh — or coming back weeks later to write
+    # the report — doesn't mean re-entering the course password and KUID). No student
+    # passwords are involved; see core/sessions.py.
+    session_ttl_days: int = field(
+        default_factory=lambda: max(1, int(os.environ.get("SESSION_TTL_DAYS", "30")))
+    )
+    # Streamlit --server.baseUrlPath: AdaLab serves at /apps/<app_url>/ with stripped_prefix
+    # FALSE (see §B1 finding), so Streamlit must know its prefix. Defaults to the slug.
+    base_url_path: str = field(default_factory=lambda: os.environ.get("BASE_URL_PATH", {{ project_slug | tojson }}))
+
+    @property
+    def institution_name(self) -> str:
+        return INSTITUTION_NAMES.get(self.host_institution, self.host_institution)
+
+    @property
+    def app_data_dir(self) -> Path:
+        """This app's per-app subdirectory of the shared ASV (§B6)."""
+        return self.data_dir / self.project_slug
+
+    @property
+    def db_path(self) -> Path:
+        return self.app_data_dir / "results.sqlite"
+
+    @property
+    def csv_path(self) -> Path:
+        """Long-format CSV mirror, rewritten on every submission (§B6)."""
+        return self.app_data_dir / "results.csv"
+
+    @property
+    def exports_dir(self) -> Path:
+        return self.app_data_dir / "exports"
+
+    @property
+    def admin_enabled(self) -> bool:
+        return bool(self.admin_password)
+
+    @property
+    def gate_enabled(self) -> bool:
+        """The course gate can admit students only when a course password is configured."""
+        return bool(self.course_password)
+
+
+settings = Settings()

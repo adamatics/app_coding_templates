@@ -5,71 +5,115 @@ identical look and behaviour across exercises, durable results across years.
 
 ## What it does
 
-Student groups record their measurements for one lab exercise and compare results — within
-the class and against previous years.
+Student groups record their measurements for one lab exercise, compare with the rest of the
+class and with previous years, and export a report they keep.
 
-- Students make a group (just names — no accounts), enter measurements in a guided form, and
-  see everyone's latest results on a table and chart.
-- A cohort selector including "All years" lets students compare with previous cohorts and
-  download a CSV for their own analysis.
-- Results are append-only. A mistake is fixed with a correction that supersedes the old
-  reading, keeping an honest history. Nothing students do can destroy data.
-- An admin area (single password) manages cohorts, groups and exports, and can seed demo
-  data. "Resetting for a new class" closes the current cohort and opens a new one — the old
-  cohort stays fully visible and exportable.
+- Students enter a **course password** (no personal account), register with their **KUID**,
+  name and hold, then join or create a group.
+- **Data capture** records measurements; **Data analysis** shows their data, an anonymised
+  comparison at a scope they choose (own, group, neighbouring group, hold, year, all years),
+  the exercise's plots, and the teacher's questions with free-text answer fields.
+- Every plot has a **"Show the code"** panel: plain pandas + plotly a student can paste into a
+  notebook and run against their exported CSV. These are pre-coding courses, so seeing the
+  code is part of the point.
+- **Export** produces CSV, Excel, a PDF report and an HTML report. The report combines the
+  group's data, their answers and the plots — apps get retired and passwords get forgotten,
+  so the export is what students keep.
+- Results are **append-only**: a mistake is fixed with a correction that supersedes the old
+  reading. "Resetting for a new class" closes the year and opens a new one — nothing is
+  deleted, and previous years stay visible and exportable.
+- An **admin area** manages course metadata (banner, FAQ, links, permitted comparison scope),
+  years, groups and exports.
 
 ## How to use it
 
 For students:
 
-- Open the app, go to Groups, add your names, and create or join a group.
-- Go to Enter results, choose your group, fill in the form, and submit.
-- Go to Results to see the table and chart, switch cohorts, or download the CSV.
+- Open the app, enter the course password, then register with your KUID (three letters and
+  three digits), your name and your hold, and join or create your group.
+- Go to **Data capture** to record measurements, and **Data analysis** to compare, answer the
+  questions, and download your report. You can come back weeks later while writing it.
 
 For the instructor / admin:
 
-- Open Admin and sign in with the admin password (set via the `ADMIN_PASSWORD` environment
-  variable at deploy time).
-- Open a cohort for the new class, close it when the class is done, and open the next one.
-- Export CSV or Parquet, latest-only or full history, per cohort or across all cohorts.
+- Open **Admin** and sign in with the admin password (`ADMIN_PASSWORD` at deploy time). Each
+  section of the Admin page explains itself in the app; in short:
+  - **Course name and instructor** — shown on the FAQ page and on every exported report, so a
+    student who finds a PDF months later knows where it came from.
+  - **Message to the class** — a banner on *every* page for *every* student, for things that
+    change mid-session ("use fridge C, A is broken"). Save an empty box to remove it.
+  - **FAQ** — Markdown, for the questions that come back every year. Add to it during the
+    session; when two groups ask the same thing, that's the signal.
+  - **Comparison scope** — the widest comparison students may pick on the analysis page.
+    Comparison views are anonymised regardless. Leave at *all* unless you want groups working
+    independently first.
+  - **Groups on/off** — turn off for individual exercises; don't change it mid-course.
+  - **Documents** — upload the **øvelsesvejledning** and anything else students should be able
+    to download (see below).
+- Open a year for the new class, close it when done, and open the next.
+- Export per year or across all years: **CSV** and **Excel** (measurements), **Answers CSV**,
+  a **full workbook** (results · answers · roster · years · log), and a **SQLite backup**.
+  Take a backup before closing a year or retiring the app. The backup, the roster and the
+  answers contain personal data — store them accordingly.
 
-To change the exercise itself (fields, analysis, instructions), edit only:
+### Documents students can download
+
+Upload the **øvelsesvejledning** (lab manual), a data sheet or a worked example under
+**Admin → Documents**. They appear on the **FAQ page** and in a *Course documents* panel on
+the **Data capture** page, so a student who forgot the manual can get it while standing at
+the bench. Give each one a title students will recognise and, optionally, a one-line
+description ("Read section 3 before you start").
+
+PDF works best; the limit is 20 MB per file — for anything larger, host it elsewhere and put
+a link in the FAQ. Files live on the course volume, so they survive redeploys and are still
+there next year. They are **not** inside the SQLite backup, so keep your own copies.
+
+### Changing the exercise itself (the seam)
+
+The two pages a teacher defines per course are `exercise/capture.py` (what students enter)
+and `exercise/analysis.py` (what they see afterwards). Both ship as **worked examples with
+inline instructions** explaining their purpose, what to put in them, and the rules that matter
+— read the top of each file before editing. The four seam files:
 
 ```
-exercise/schema.py     the measurement fields (form, table, chart, export all follow)
-exercise/analysis.py   optional derived statistics
-exercise/content.md     the Home-page instructions
+exercise/schema.py     the measurement fields (storage, CSV and exports follow)
+exercise/capture.py    the DATA ENTRY page — draw inputs, return a dict
+exercise/analysis.py   the ANALYSIS page — return plots built with core.plots
+exercise/content.md    the instructions and the analysis questions
 ```
 
 Run it locally (a writable volume MUST be mounted at the data path):
 
 ```
 podman build -t {{ project_slug }} .
-podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e ADMIN_PASSWORD=change-me {{ project_slug }}
+podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
 ```
 
-Then open http://localhost:8000
+Then open http://localhost:8000/{{ project_slug }}/
 
 ## Tech stack
 
-- Backend: Python 3.11, FastAPI, SQLite (WAL mode), SQLAlchemy 2, Pydantic v2.
-- Frontend: React 18 + Vite + TypeScript, built to static files and served by the same
-  FastAPI process. One container, one process, one port (8000).
+- Python 3.11, Streamlit, pandas, plotly, lmfit, SQLAlchemy 2, Pydantic v2, SQLite (WAL).
+- Reports: reportlab (PDF) and plotly (HTML); Excel via openpyxl.
+- Single process, single container, port 8000. No Node, no separate API.
+- Architecture: `core/` is framework-free Python and imports Streamlit nowhere (a test
+  enforces it), `pages/` is the thin Streamlit UI, `exercise/` is the per-app seam, `app.py`
+  is the entry point.
 - Visual identity: the fixed CPDSE palette and Verdana typography, defined once in
-  `frontend/src/theme.css`.
+  `core/theme.py` and applied to both the UI and every plot.
 
-Branding note: this app ships with PLACEHOLDER CPDSE logo SVGs (a simple snake mark and
-wordmark in the correct colourways) at `frontend/src/assets/` and `frontend/public/favicon.svg`.
-Replace them with the official CPDSE assets from the published logo package before any real
-use. Accessibility note: body text is Charcoal on Soft White / Ivory Gold Tint (both meet
-WCAG AA); the header title uses Soft White on Forest Green as the identity specifies.
+Branding note: this app ships with PLACEHOLDER CPDSE logo artwork (a simple snake mark and
+wordmark in the correct colourways, drawn inline in `pages/_components.py`). Replace with the
+official CPDSE assets before any real use. Body text is Charcoal on Soft White / Ivory Gold
+Tint (both meet WCAG AA); the header uses Soft White on Forest Green as the identity specifies.
 
 ## Dependencies
 
 - A container runtime (Podman or Docker) to build and run the image.
-- A persistent, writable volume mounted at the data path — see Access.
-- No external services, no database server, no accounts. Python and Node dependencies are
-  pinned in `pyproject.toml` and `frontend/package.json`.
+- A persistent, writable AdaLab Shared Volume mounted at the data path — see Access.
+- No external services, no database server, no student accounts. Versions are pinned in
+  `pyproject.toml`.
 
 ## Source
 
@@ -78,35 +122,73 @@ WCAG AA); the header title uses Soft White on Forest Green as the identity speci
 
 ## Access
 
-- Students: no login. Identification is by choosing your group from the dropdown (honour
-  system by design). When deploying on AdaLab, set the app's Access Control to **Public** if
-  students do not have AdaLab accounts. The manifest ships `access_level: logged_in` as the
-  safe default; changing it to public is a deliberate teacher decision, recorded in the
-  versioned `.adalab/app.json`.
-- Admin: protected by the `ADMIN_PASSWORD` environment variable, compared constant-time; the
-  session is a signed, HTTP-only cookie. If `ADMIN_PASSWORD` is unset the admin area is
-  disabled (fail closed). To rotate the password, redeploy with a new value — there is no
-  password stored on disk and no self-service password UI.
+- Students: no AdaLab account. The **course password** (`COURSE_PASSWORD`, rotated each
+  semester at deploy time) is the access control, so `.adalab/app.json` sets
+  `access_level: "public"`. Identity is self-registration by KUID — there are no per-student
+  passwords.
+- Admin: `ADMIN_PASSWORD`, compared constant-time. If it is unset the admin area is disabled
+  (fail closed). Rotate by redeploying with a new value.
+- Students stay signed in across a page refresh (and when they come back weeks later) via an
+  opaque token in the URL — **no student passwords**. Only a hash of it is stored, it carries
+  no personal data, it expires after `SESSION_TTL_DAYS`, and "Sign out" revokes it
+  immediately. Note the URL is therefore a bearer credential: sharing the link shares the
+  session, exactly as sharing a KUID already allows impersonation under the honour-system model.
 - Environment variables (complete set): `DATA_DIR` (default `/asv-mnt/lab-data`),
-  `ADMIN_PASSWORD` (required for admin), `DEMO_MODE` (default `false`).
+  `COURSE_ID`, `COURSE_PASSWORD`, `ADMIN_PASSWORD`, `DEMO_MODE` (default `false`),
+  `APP_PORT` (default 8000), `BASE_URL_PATH` (default the app slug — see URL prefix below),
+  `SESSION_TTL_DAYS` (default 30), `LOG_PII` (default `false` — see Logging).
+
+### Logging
+
+Every meaningful action is recorded: student registrations (with timestamps), returning
+students, group creation, **every submission**, **every correction** (with the old values, the
+new values and which fields changed), answers saved, exports actually taken, all admin actions,
+and all errors with their tracebacks.
+
+It goes to three places, because each answers a different question:
+
+- **The `event` table** — filterable by level / action / KUID in **Admin → Log**, downloadable
+  as CSV. This is the teacher-facing record of what happened in a lab session.
+- **stdout** — lands in the container / AdaLab log viewer, for whoever is on call.
+- **`$DATA_DIR/<app>/events.jsonl`** — on the shared volume, so the log survives redeploys
+  (stdout does not). Rotated at 5 MB to `events.jsonl.1`.
+
+Personal data handling: the database and the volume log keep the KUID (same data processing
+agreement as the results themselves); **stdout gets a pseudonymous `member:<id>` instead**,
+because platform logs are aggregated more widely. Set `LOG_PII=true` to include KUIDs in
+stdout too. Logging is best-effort by design — a failing log sink can never block a student's
+submission.
+
+### URL prefix (important)
+
+Streamlit must know the sub-path it is served under, and it needs that prefix on incoming
+requests. So this app sets **`stripped_prefix: false`** in `.adalab/app.json` and runs
+Streamlit with `--server.baseUrlPath=$BASE_URL_PATH` (defaulting to the app slug). Verified
+locally: with the prefix in place the page, static assets, fonts and the Streamlit
+**websocket** all resolve; without it they 404. If a future AdaLab version strips the prefix
+instead, set `BASE_URL_PATH=""` and flip `stripped_prefix` back to `true`.
 
 ### Persistent storage (deployment prerequisite)
 
-The app stores everything under `DATA_DIR` (default `/asv-mnt/lab-data`) and **refuses to
-start if that path is not a mounted, writable volume** — student data is never written to
-disposable container-local storage, which would be lost on the next redeploy.
+Everything is stored under `DATA_DIR` (default `/asv-mnt/lab-data`), in a per-app
+subdirectory: SQLite (`results.sqlite`) is the system of record and a long-format
+`results.csv` mirror is rewritten on every submission. The app **refuses to start if that
+path is not a mounted, writable volume** — student data is never written to disposable
+container-local storage.
 
 - This is a **single-replica** app: SQLite in WAL mode is a single-instance embedded
-  database. Do **not** scale it horizontally — multiple replicas over one volume corrupt it.
-- Persistence uses an **AdaLab Shared Volume (ASV)** with **Fast Mount** — required, not an
+  database. Do **not** scale it horizontally.
+- Persistence uses an **AdaLab Shared Volume (ASV)** with **Fast Mount ON** — required, not an
   optimization: SQLite over a plain network mount is the wrong shape for write traffic.
+- One ASV is mounted into every course app, so a KUID's history across apps and years stays
+  reachable; each app owns its own subdirectory.
 
-One-time ASV setup runbook (a fresh volume has no filesystem permissions, so writes fail
-until you chmod it — the mount can show green and every write still `PermissionError`s):
+One-time ASV setup runbook (a fresh volume has no filesystem permissions, so writes fail until
+you chmod it — the mount can show green and every write still fails):
 
 1. Create the volume on the AdaLab **Volumes** page.
 2. Set its **ACL** (View / Mount / Edit) so you may attach it.
-3. Mount it in a **lab**, open a terminal, and run (replaces the missing permissions):
+3. Mount it in a **lab**, open a terminal, and run:
 
    ```bash
    sudo chown root:$NB_GROUP <Volume_Name>
@@ -114,11 +196,10 @@ until you chmod it — the mount can show green and every write still `Permissio
    ```
 
 4. In the **App Deployment** wizard, mount the volume at mount path `lab-data` (the platform
-   prefixes `/asv-mnt/`, giving `/asv-mnt/lab-data`) with **Fast Mount ON**.
+   prefixes `/asv-mnt/`) with **Fast Mount ON**.
 
 Both layers are required: correct ACL without the chmod means writes fail; correct chmod
-without ACL means you cannot mount. (This chmod step is expected to become implicit in
-AdaLab v1.6.)
+without ACL means you cannot mount. (Expected to become implicit in AdaLab v1.6.)
 
 ### Deployment order
 
@@ -130,5 +211,5 @@ owner: {{ contact_email }}
 version: 0.1.0
 use: https://<your-adalab-host>/apps/{{ project_slug }}/
 source: <repo URL>
-data: $DATA_DIR/results.sqlite (exports: /api/export)
+data: $DATA_DIR/{{ project_slug }}/results.sqlite (mirror: results.csv, exports in-app)
 ```
