@@ -155,6 +155,34 @@ cd ~/my-exercise
 DATA_DIR=$(mktemp -d) python3 -m pytest -q
 ```
 
+### See your changes as you make them
+
+Do **not** rebuild the container to check a layout change — that is minutes for something you
+can see in seconds. Run the app straight from your folder:
+
+```bash
+cd ~/my-exercise
+STORAGE_MODE=local DATA_DIR=./devdata COURSE_PASSWORD=dev ADMIN_PASSWORD=dev DEMO_MODE=true \
+  python3 -m streamlit run app.py --server.runOnSave=true --server.port=8501
+```
+
+Open the URL it prints, sign in with `dev`, and leave it running. Every time you save
+`exercise/capture.py`, `exercise/analysis.py` or `exercise/content.md`, the page reloads with
+your change.
+
+Three flags earn their place here:
+
+| | |
+| --- | --- |
+| `--server.runOnSave=true` | reload on save, instead of clicking "Rerun" every time |
+| `STORAGE_MODE=local` | no Shared Volume needed while you work |
+| `DEMO_MODE=true` | seeds example students and results, so your plots have data — an empty app hides most layout problems |
+
+`./devdata` is a throwaway database; delete the folder to start from a clean cohort.
+
+Keep the container build for **before you deploy**, not for every edit. It is what catches
+dependency and packaging problems, which a layout tweak cannot introduce.
+
 Working with Claude Code in this folder? Just describe the change — *"add a pH field, range 0
 to 14"* — and it will edit the right file. The repository tells the agent where the boundaries
 are.
@@ -166,6 +194,22 @@ are.
 The app stores everything on an **AdaLab Shared Volume**, and **it will refuse to start
 without one** — that is deliberate, so a redeploy can never silently wipe a year of student
 results.
+
+### Quickest possible start: skip the volume
+
+If you only want to see your app running — a first trial, a demo, testing your exercise — set
+one environment variable in the deploy wizard and skip this whole section:
+
+| Variable | Value |
+| --- | --- |
+| `STORAGE_MODE` | `local` |
+
+Leave **Volume mounts** empty. The app writes to its own container disk instead.
+
+**The catch, and it is a real one:** everything is erased when the container is replaced —
+every redeploy, every restart, every resource change. The app tells you so on every screen and
+on the Export tab. Fine for trying things out; not for a class whose results you need. When
+you are ready for real students, mount the volume below and remove `STORAGE_MODE`.
 
 ### The CPDSE volume
 

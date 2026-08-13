@@ -16,11 +16,18 @@ ENV PYTHONUNBUFFERED=1 \
     APP_PORT=8000 \
     DEMO_MODE=false
 
-# The URL prefix AdaLab serves this app under (/apps/<app_url>/). Streamlit needs the prefix
-# present on incoming requests (see the §B1 finding), which is why .adalab/app.json sets
-# stripped_prefix:false. Set BASE_URL_PATH="" to serve at the root instead (e.g. if a future
-# platform version strips the prefix before forwarding).
-ENV BASE_URL_PATH={{ project_slug }}
+# Serve at the container root. AdaLab's default `stripped_prefix: true` removes the
+# /apps/<app_url> prefix before forwarding, and Streamlit emits RELATIVE asset URLs
+# (./static/..., ./_stcore/stream), so the browser resolves them against the prefixed page
+# and the proxy strips them again on the way in. Both the page and the websocket work.
+#
+# Serving at the root also keeps the extension's Test step working: it probes "/" on the
+# container and expects 2xx. With --server.baseUrlPath set, "/" is a 404 and Test fails.
+#
+# Escape hatch: if your platform does NOT strip the prefix, set BASE_URL_PATH to the prefix
+# (e.g. "apps/<app_url>") AND set stripped_prefix:false in .adalab/app.json. Never mix the
+# two — a prefix-aware app behind a stripping proxy 404s on every asset.
+ENV BASE_URL_PATH=""
 
 WORKDIR /app
 
@@ -32,7 +39,7 @@ COPY pyproject.toml ./
 RUN uv pip install --system --no-cache -r pyproject.toml
 
 COPY core/ ./core/
-COPY pages/ ./pages/
+COPY ui/ ./ui/
 COPY exercise/ ./exercise/
 COPY assets/ ./assets/
 COPY .streamlit/ ./.streamlit/
@@ -44,12 +51,12 @@ EXPOSE 8000
 # process exits non-zero and Streamlit is never started — the container must not serve an app
 # whose writes all fail. Then exec streamlit.
 #
-# AdaLab serves the app at /apps/<app_url>/. The §B1 check found Streamlit needs the prefix
-# on incoming requests, so app.json sets stripped_prefix:false and we tell Streamlit its
-# base path here. BASE_URL_PATH defaults to the project slug (see core/config.py).
+# The baseUrlPath flag is added only when BASE_URL_PATH is non-empty (see the ENV above);
+# by default the app serves at the root, which is what both the AdaLab proxy (stripping)
+# and the extension's Test probe expect.
 CMD ["sh", "-c", "python -m core.preflight && exec streamlit run app.py \
   --server.port=${APP_PORT:-8000} \
   --server.address=0.0.0.0 \
   --server.headless=true \
-  --server.baseUrlPath=${BASE_URL_PATH} \
+  ${BASE_URL_PATH:+--server.baseUrlPath=$BASE_URL_PATH} \
   --browser.gatherUsageStats=false"]

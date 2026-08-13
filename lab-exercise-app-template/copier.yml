@@ -47,7 +47,7 @@ _message_after_copy: |
          podman build -t {{ project_slug }} .        # or: docker build -f Containerfile -t {{ project_slug }} .
          podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
            -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
-       then open http://localhost:8000/{{ project_slug }}/
+       then open http://localhost:8000/
 
 # ---------------------------------------------------------------------------
 # Questions

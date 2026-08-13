@@ -60,9 +60,27 @@ def require_writable_data_dir() -> None:
         settings.app_data_dir.mkdir(parents=True, exist_ok=True)
         settings.exports_dir.mkdir(parents=True, exist_ok=True)
         return
+    if settings.local_storage:
+        # Opt-in local disk (STORAGE_MODE=local): an ordinary directory, created on demand.
+        # Still fail loud if it cannot be written — an app that cannot store results is
+        # worse than one that refuses to start, whichever storage it was pointed at.
+        try:
+            settings.app_data_dir.mkdir(parents=True, exist_ok=True)
+            settings.exports_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise StorageError(textwrap.dedent(f"""
+                STORAGE_MODE=local, but {data_dir} could not be created or written: {exc}
+                Point DATA_DIR at a directory you can write to, or mount a Shared Volume
+                and unset STORAGE_MODE.
+            """).strip()) from exc
+        return
+
     hint = (
         f"Mount the AdaLab Shared Volume at {data_dir} (Fast Mount ON) and chmod it once "
-        f"(see README). e.g. locally: docker run -v ./lab-data:{data_dir} ..."
+        f"(see README). e.g. locally: docker run -v ./lab-data:{data_dir} ...\n"
+        f"To run without a volume on purpose — a laptop, a lab, or a short trial — set "
+        f"STORAGE_MODE=local. Data then lives on local disk and is LOST on redeploy, and "
+        f"the app says so on every screen."
     )
     if not data_dir.exists():
         raise StorageError(textwrap.dedent(f"""

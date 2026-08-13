@@ -11,8 +11,8 @@ It does two jobs:
      DB, wiping a chassis tree, tampering with the guard).
 
 Deliberately NOT blocked here (they are ``permissions.ask`` — editable with confirmation):
-``frontend/src/theme.css`` and ``.adalab/local_container_demo.json``. The only always-writable
-zone is the exercise seam (``exercise/``).
+``.adalab/local_container_1.json``, ``pyproject.toml`` and ``.streamlit/config.toml``. The only
+always-writable zone is the exercise seam (``exercise/``).
 
 Blocking mechanism: exit code 2 with an explanatory message on stderr (Claude Code treats
 this as "deny and show the reason to the model").
@@ -29,7 +29,7 @@ from pathlib import Path
 # --- the canonical protected set (Addendum B §B9; identical across all three layers) ---
 PROTECTED = [
     "core/**",
-    "pages/**",
+    "ui/**",
     "app.py",
     "assets/**",
     ".adalab/app.json",
@@ -66,10 +66,10 @@ def _edit_message(rel: str) -> str:
         "  • exercise/capture.py   — the Streamlit input UI for this exercise\n"
         "  • exercise/analysis.py  — the exercise's plots (via core.plots)\n"
         "  • exercise/content.md   — instructions + the analysis questions\n\n"
-        "core/ is framework-free and must never import streamlit; pages/ is the chassis UI.\n"
-        "Compose components from core/ and pages/_components.py rather than styling from\n"
+        "core/ is framework-free and must never import streamlit; ui/ is the chassis UI.\n"
+        "Compose components from core/ and ui/_components.py rather than styling from\n"
         "scratch, so the CPDSE identity holds across apps.\n"
-        "(.adalab/local_container_demo.json and pyproject.toml are editable WITH confirmation.)\n"
+        "(.adalab/local_container_1.json and pyproject.toml are editable WITH confirmation.)\n"
         "See .claude/skills/lab-exercise-app/ for the chassis-vs-seam map.\n"
         "(Template maintainers editing the chassis itself: set ALLOW_CHASSIS_EDIT=1.)\n"
     )

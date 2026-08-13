@@ -18,7 +18,7 @@ paths:
 **`core/**` must never import streamlit**, and neither must `exercise/schema.py` (because
 `core` imports it). This keeps the UI swappable and makes `core/` the seed of the shared
 library later apps will depend on. `tests/test_core_no_streamlit.py` fails the build on a
-stray import — don't work around it, move the code to `pages/` or `exercise/` instead.
+stray import — don't work around it, move the code to `ui/` or `exercise/` instead.
 
 ## In the seam (`exercise/`)
 

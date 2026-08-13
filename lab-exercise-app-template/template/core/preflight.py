@@ -50,6 +50,18 @@ def main() -> int:
             "without the volume.\n\n"
         )
 
+    if settings.local_storage:
+        sys.stderr.write(
+            "\n=== LOCAL DISK STORAGE — NOT DURABLE ===\n"
+            f"STORAGE_MODE=local, so results are written to {settings.data_dir} on this\n"
+            "container's own disk instead of an AdaLab Shared Volume.\n"
+            "Everything here is ERASED when the container is replaced — which includes\n"
+            "every redeploy, every restart of a stopped app, and any resource change.\n"
+            "Fine for a laptop, a lab, or a trial. Before a class whose results matter,\n"
+            "mount a Shared Volume and unset STORAGE_MODE. If you keep local storage,\n"
+            "export from Admin after every session — that is the only copy.\n\n"
+        )
+
     if settings.demo_mode:
         with SessionLocal() as session:
             created = seed_demo_data(session)
@@ -60,6 +72,8 @@ def main() -> int:
         purged = sessions.purge_expired(session)
         events.log(session, "app_started",
                    detail={"data_dir": str(settings.app_data_dir), "demo_mode": settings.demo_mode,
+                           "storage_mode": settings.storage_mode,
+                           "storage_is_durable": settings.storage_is_durable,
                            "expired_sessions_purged": purged})
 
     sys.stdout.write(f"[preflight] storage OK at {settings.app_data_dir}\n")

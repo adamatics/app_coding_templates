@@ -18,14 +18,17 @@ out plainly and is *not* claimed as passing.
 
 ---
 
-## 1. §B1 deployment check — done first, with a finding
+## 1. §B1 deployment check — done first, then corrected on a real tenant
 
-**No AdaLab tenant is reachable from this environment**, so per your instruction I built a
-local equivalent that proves the same two properties, and I say plainly below what remains
-unverified.
+> **Read this section as a correction.** My original §B1 conclusion (`stripped_prefix: false`
+> + `--server.baseUrlPath`) was one of *two* valid configurations, and I picked the wrong one.
+> A real deploy rejected it. The current config is the other one, now verified. The original
+> reasoning is kept below because the failure mode it describes is real and still matters.
 
-**Setup.** Hello-world Streamlit run with `--server.baseUrlPath apps/hello`, fronted by a
-passthrough TCP proxy (a proxy hop between client and app, as AdaLab has).
+**No AdaLab tenant was reachable from my environment**, so I built a local equivalent.
+
+**First experiment.** Hello-world Streamlit run with `--server.baseUrlPath apps/hello`, fronted
+by a *passthrough* TCP proxy:
 
 | Check | Direct | Through proxy |
 | --- | --- | --- |
@@ -35,22 +38,62 @@ passthrough TCP proxy (a proxy hop between client and app, as AdaLab has).
 | **WebSocket `/_stcore/stream`** | **101, session established** | **101, held open** |
 | Same paths *without* the prefix (control) | 404 | — |
 
-**Finding — this changed the deploy config.** Streamlit's router requires the prefix to be
-present on incoming requests: with `baseUrlPath` set, requests at `/` return **404**. That is
-exactly what a *stripping* proxy would deliver. So Addendum B's "retain `stripped_prefix:
-true`" cannot hold together with `--server.baseUrlPath`, and §B1 is the check designed to
-surface this (it says: if assets don't resolve, set `--server.baseUrlPath` — which requires
-the prefix to arrive intact).
+That works — but it only proves the prefix-aware setup is *self-consistent*. It does not prove
+it is the setup AdaLab wants, and I did not test the alternative. That was the gap.
 
-**Resolution:** `.adalab/app.json` sets **`stripped_prefix: false`** and the container runs
-Streamlit with `--server.baseUrlPath=$BASE_URL_PATH` (defaulting to the app slug). Documented
-in the app README with the one-line fallback if a future AdaLab version behaves differently
-(`BASE_URL_PATH=""` + `stripped_prefix: true`).
+**What the real tenant said.** Deploying it failed at the extension's Test step:
 
-**Not verifiable here:** whether AdaLab's real proxy forwards the prefix and holds the
-websocket open for a long session. The local equivalent proves Streamlit's side and that a
-proxy hop is not inherently fatal; the tenant's proxy config is the remaining unknown. This
-is the single highest-value thing to check on a real tenant before building more apps.
+```
+CONTAINER_READINESS_FAILED: Unexpected status code: 404
+```
+
+Reproduced exactly in a container: Test probes `/` on the container, and with
+`--server.baseUrlPath=<slug>` the app exists only at `/<slug>/`, so `/` is a 404.
+
+```
+GET /        -> 404      GET /<slug>/ -> 200      /_stcore/health -> 404
+```
+
+**Second experiment — the one I should have run first.** App at the **container root**, behind
+a *stripping* proxy (`/apps/<slug>/*` → `/*`), which is AdaLab's default:
+
+```
+GET :8511/                                    -> 200   (what Test probes)
+GET :9100/apps/<slug>/                        -> 200
+GET :9100/apps/<slug>/static/js/index.*.js    -> 200
+WS  ws://:9100/apps/<slug>/_stcore/stream     -> connected
+```
+
+It works because Streamlit emits **relative** asset URLs (`./static/…`, `./_stcore/stream`):
+the browser resolves them against the prefixed page, and the proxy strips the prefix again on
+the way in. My original reasoning missed this — I checked that the prefix-aware setup worked
+and stopped, rather than checking whether the app could do without the prefix at all.
+
+**Resolution (current):** `.adalab/app.json` keeps AdaLab's default **`stripped_prefix: true`**
+and the container serves at the root — `ENV BASE_URL_PATH=""`, with the flag applied only when
+that variable is non-empty:
+
+```sh
+${BASE_URL_PATH:+--server.baseUrlPath=$BASE_URL_PATH}
+```
+
+Verified in a container built exactly as Test builds it (no volume, no env):
+
+```
+GET /               -> 200      ← the readiness probe
+GET /_stcore/health -> ok
+GET /static/js/…    -> 200      container: running
+```
+
+The escape hatch is the old configuration: set `BASE_URL_PATH` to the prefix **and** flip
+`stripped_prefix` to `false`. `test_prefix_handling_is_internally_consistent()` now enforces
+the pairing in *both* directions, so the mixed state that caused this can't be committed again.
+
+**Still not verified on a live tenant:** that AdaLab's proxy holds the websocket open for a
+long classroom session. The container-level checks above cover the page, the assets, the
+readiness probe and a local websocket through a stripping proxy; sustained websocket behaviour
+through the tenant's own ingress is the remaining unknown, and is best checked by leaving a
+deployed app open for a lecture's length.
 
 ---
 
@@ -218,12 +261,50 @@ fixed a real bug plus several latent ones:
   container file, two primaries, a reserved env var, a committed secret, and a
   `stripped_prefix`/`baseUrlPath` mismatch.
 
-The §B1 finding is now **corroborated by the platform's own troubleshooting**, which states the
-prefix-aware vs root-serving choice is all-or-nothing — so `stripped_prefix: false` alongside
-`--server.baseUrlPath` is the documented-correct pairing, not just my experiment.
+The platform's own troubleshooting states the prefix-aware vs root-serving choice is
+all-or-nothing. Both pairings satisfy that rule; the deciding factor turned out to be the
+extension's Test probe, which only the root-serving one survives (see §1).
 
 Verified: **138 tests**, container builds and serves under its prefix with the logo inside the
 image. Still not verifiable here: an actual deploy on a live tenant.
+
+## 4b. Two defects found by deploying it (and the tests that now catch them)
+
+Both were found by Sune running the app on the CPDSE tenant, not by me. Both were classes of
+gap in the test suite rather than one-off slips, so each is closed with a guard.
+
+### `NameError: name 'events' is not defined` — every page, first load
+
+`_bootstrap()` called `events.setup_logging()`; the import was never added when the logging
+framework went in. **144 tests passed** because nothing imported `app.py` — the unit tests
+exercise `core/` — and the call sits inside a function, so even an import test would have
+missed it.
+
+Closed by two new test files:
+
+* `tests/test_imports_and_globals.py` — imports every module, then disassembles it and checks
+  every `LOAD_GLOBAL` resolves. Verified by reintroducing the bug (fails with
+  `line 37: events`), and it contains a test that the check itself still detects that pattern.
+* `tests/test_app_renders.py` — runs the real script through `streamlit.testing.v1.AppTest`
+  and walks the student's path. It also fails on a rendered error-boundary notice, because
+  `main()` swallows page exceptions into a friendly message that would otherwise look clean.
+
+### Streamlit published the app's internals as pages
+
+Students saw `login`, `register`, `session_url` and `components` in the sidebar, each with a
+URL. Cause: the UI package was called `pages/`, and Streamlit enables magic multipage mode
+from that directory name alone. The package is now `ui/`; `tests/test_navigation.py` fails if
+`pages/` reappears, and `CLAUDE.md` tells agents why not to rename it back.
+
+**This also retires a false claim** in the old `app.py` docstring — that the gate could not be
+bypassed by deep-linking. It could not be bypassed *through this file*, but Streamlit had
+published a second set of URLs that never reached it.
+
+The same report prompted a menu redesign: a student's menu is the exercise only (Data capture,
+Data analysis, FAQ), registration is a forced one-time step between the gate and the exercise,
+and "My group" / "Admin" sit under a collapsed **More**. See `DECISIONS.md`.
+
+**231 tests** now pass from both the nested source and the flattened published layout.
 
 ## 5. Base spec §15 acceptance
 
@@ -255,10 +336,10 @@ image. Still not verifiable here: an actual deploy on a live tenant.
 
 ## 6. Addendum A §A6 acceptance
 
-11. **✅ Builds/runs on 8000; `.adalab` matches §A2** — with the deliberate, documented
-    exception that **`stripped_prefix` is now `false`** (the §B1 finding) and `access_level` is
-    `public` (§B2). `uid: 1`, ports 8000, `volume_mounts: []`, `local_container_demo.json` and
-    `project.json` are unchanged from §A2.
+11. **✅ Builds/runs on 8000; `.adalab` matches §A2** — `stripped_prefix` is AdaLab's default
+    `true` (see the §1 correction) and `access_level` is `public` (§B2). `uid: 1`, ports 8000,
+    `volume_mounts: []`, `local_container_1.json` (filename suffix = uid) and `project.json`
+    are otherwise as §A2.
 12. **✅ Missing/unwritable `DATA_DIR` fails loud, no silent fallback** — now enforced in the
     entrypoint (see §4), verified in a real container plus two unit tests.
 13. **✅ `lost+found` / `.AVI_SUCCESS` filtered** wherever the app enumerates the volume
@@ -326,8 +407,9 @@ image. Still not verifiable here: an actual deploy on a live tenant.
 
 ## 9. What I'd do next
 
-- **Deploy the hello-world to a real tenant** and confirm/refute the `stripped_prefix: false` +
-  `baseUrlPath` finding, then the full app; this unblocks every ⚪ item.
+- **Deploy on a real tenant** — done for Test/Build (that is what produced the §1 correction).
+  What remains is a full deploy left running for a lecture's length, to confirm the websocket
+  survives; this unblocks the remaining ⚪ items.
 - Add **`AppTest`-based UI tests** for the gate, registration, capture→supersede and the scope
   selector — the biggest coverage gap.
 - Add a **second worked seam** (a non-chemistry exercise) plus CI that stamps, tests and builds

@@ -1,0 +1,10 @@
+# Working directories for scripts/dev.py — the live UI preview loop.
+# .devapp/ is a stamped shell whose plain files are symlinks back into template/;
+# .devdata/ is its throwaway database. Both are rebuilt on demand; neither is source.
+.devapp/
+.devdata/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store

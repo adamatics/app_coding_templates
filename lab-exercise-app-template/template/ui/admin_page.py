@@ -14,7 +14,7 @@ from core import storage
 from core.config import settings
 from core.db import get_session
 from core.errors import CoreError
-from core.models import Group, Member
+from core.models import Member
 
 from . import _components as C
 
@@ -345,6 +345,11 @@ def _groups_tab() -> None:
 
 def _export_tab() -> None:
     st.subheader("Export")
+    if not settings.storage_is_durable:
+        C.notice(
+            "<b>This app is not writing to a Shared Volume, so an export is the only lasting "
+            "copy.</b> Download the database below at the end of every session — a redeploy "
+            "or restart erases everything stored in the app.", "err")
     st.caption("Columns are the schema fields plus year/hold/group/kuid/submitted_at/superseded, "
                "so exports from different years line up directly.")
     with get_session() as session:
@@ -441,7 +446,8 @@ def _log_tab() -> None:
                f"{counts.get('student_registered', 0)} registrations · "
                f"{counts.get('result_submitted', 0)} submissions · "
                f"{counts.get('result_superseded', 0)} corrections · "
-               f"{counts.get('export_generated', 0)} exports")
+               f"{counts.get('export_generated', 0)} exports · "
+               f"{errors} failures")
 
     frame = pd.DataFrame(rows)
     st.dataframe(frame, use_container_width=True, hide_index=True)

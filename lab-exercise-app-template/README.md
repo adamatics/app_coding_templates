@@ -50,30 +50,73 @@ identically (the *chassis*) and differ only in the exercise-specific parts (the 
 > instead — a step-by-step walkthrough for the lab terminal, from installing Copier to
 > deploying, with a check after every step. No GitHub account needed; the repo is public.
 
-Copier has no `--directory`/monorepo-subdir flag (that is a cookiecutter feature), so stamp
-by pointing Copier at this template's subdirectory of a clone:
-
 ```bash
-git clone git@github.com:adamatics/app_coding_templates.git
-copier copy app_coding_templates/lab-exercise-app-template ./my-exercise --trust
+copier copy gh:cpdse/lab-exercise-app-template ./exercises --trust
 ```
 
-The app is generated directly in `./my-exercise/`. Then:
+The app is generated at `./exercises/<project_slug>/`. Then:
 
 ```bash
-cd my-exercise
-podman build -t my-exercise .
+cd exercises/<project_slug>
+podman build -t <project_slug> .
 mkdir -p ./lab-data
 podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
-  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me my-exercise
-# open http://localhost:8000/my-exercise/
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me <project_slug>
+# open http://localhost:8000/
 ```
 
-Note the URL prefix: Streamlit is run with `--server.baseUrlPath`, and `.adalab/app.json` sets
-`stripped_prefix: false`, because Streamlit needs the prefix on incoming requests (verified —
-see `HANDOVER.md` §B1).
+Note the URL prefix: the app serves at the **container root** and `.adalab/app.json` keeps
+AdaLab's default `stripped_prefix: true`. Streamlit emits relative asset URLs, so everything
+resolves correctly under `/apps/<slug>/` once the proxy strips the prefix — and the container
+still answers `/`, which the extension's Test step requires. See `HANDOVER.md` §B1.
+
+## Designing the UI: the live preview loop
+
+`copier → build → test` is the **release gate**, not the edit loop. Running it after every
+layout tweak costs minutes and still cannot show you how a page *looks* — the container proves
+the app starts, and the tests prove the widgets exist, but neither shows spacing, colour, or a
+chart crowding its caption.
+
+For design work, run the template directly:
+
+```bash
+python3 scripts/dev.py
+```
+
+Then edit `template/{{project_slug}}/ui/**`, `exercise/**` or `core/theme.py` and **save** —
+the page reruns in the browser. Seconds, not minutes, and you are editing the template itself
+rather than a copy you would have to port changes back from.
+
+**How it works.** Copier renders only files ending in `.jinja`. Exactly one Python file in the
+whole template is templated (`core/config.py.jinja`) and nothing under `ui/` is — so `dev.py`
+stamps once into `.devapp/`, then replaces every plain file with a **symlink back to the
+template**. Streamlit resolves the symlink, watches the real file, and reruns on save.
+
+| | |
+| --- | --- |
+| Sign in with | course password `dev`, admin password `dev` |
+| Demo data | seeded by default, so charts and tables have content — empty screens hide most layout problems |
+| `--empty` | start with no data, to inspect the first-run state deliberately |
+| `--port N` | default 8501 |
+| `--rebuild` | re-render the `.jinja` files (done automatically when one changes) |
+
+`.devapp/` and `.devdata/` are working directories, both git-ignored. Delete `.devdata/` to
+start a fresh cohort.
+
+**What it does not cover.** The dev loop uses your local Python, not the container, and serves
+at the root without a proxy. So before you commit, still run the gate — the tests and a
+container build — which is what catches dependency, prefix and packaging problems:
+
+```bash
+copier copy . /tmp/check --defaults --trust -d project_slug=check-lab && cd /tmp/check/check-lab && python3 -m pytest -q
+```
 
 ## Before an app can run: the Shared Volume
+
+> **Just trying it out?** Set `STORAGE_MODE=local` and the app writes to an ordinary
+> directory instead, creating it if needed — no volume, no mount, no `chmod`. Data then lives
+> on the container's own disk and is **erased by every redeploy or restart**, so the app says
+> so on every screen and pushes you to export. See *Local disk instead of a volume* below.
 
 Stamping and deploying is not enough — **every app needs an AdaLab Shared Volume (ASV), and
 the volume is created separately from the app.** This is the step that is not part of the VS
@@ -113,6 +156,40 @@ subdirectory), which is how a student's history stays reachable across a course.
 The stamped app carries the full runbook in its own README, and agents working in the app get
 it from `.claude/skills/lab-exercise-app/references/adalab-deployment.md`.
 
+### Local disk instead of a volume
+
+`STORAGE_MODE=local` writes results to `DATA_DIR` as an ordinary directory, creating it if it
+does not exist:
+
+```bash
+podman run -p 8000:8000 -e STORAGE_MODE=local \
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me <project_slug>
+```
+
+In AdaLab, set `STORAGE_MODE=local` in the deploy wizard's environment variables and leave
+**Volume mounts** empty.
+
+**What you give up.** Container-local data is erased whenever the container is replaced — every
+redeploy, every restart of a stopped app, every resource change. So it is right for a laptop, a
+lab, a demo, or a first trial before anyone has provisioned a volume, and wrong for a class
+whose results matter unless you export after every session.
+
+The app does not let this pass quietly:
+
+- a standing notice on **every screen**, including the sign-in page
+- a warning block at startup in the container log
+- a notice on **Admin → Export** saying the download is the only lasting copy
+- `storage_mode` and `storage_is_durable` recorded in the `app_started` event
+
+**It is never reached by accident.** Without `STORAGE_MODE=local`, a missing volume still
+aborts startup — that is the guard that stops a forgotten mount silently writing a year of
+results into a container that the next redeploy throws away. The abort message names this
+escape hatch, so nobody has to guess. `tests/test_storage.py` pins all of it, including that
+local mode *still* fails loud when the directory it was pointed at cannot be written.
+
+To move to a volume later: mount the ASV, unset `STORAGE_MODE`, and copy your last export in
+via the Admin page (or drop the SQLite file into the volume's `<app-slug>/` subdirectory).
+
 ## Customising the exercise (the seam)
 
 Inside a stamped app you edit **only these four files**:
@@ -137,21 +214,24 @@ disable the guard. Documented only here, not in the stamped app.
 DATA_DIR=$(mktemp -d) python -m pytest -q      # 138 tests
 ```
 
-The suite includes the three load-bearing checks: `core/` imports with **no streamlit
+The suite includes the three load-bearing checks — `core/` imports with **no streamlit
 installed**, every plot's "Show the code" **runs standalone** against an exported CSV, and
-**60 simultaneous sessions** submit without error or cross-session leakage.
+**60 simultaneous sessions** submit without error or cross-session leakage — plus a
+`.adalab/` integrity suite that catches the deployment mistakes which otherwise only surface
+at build or deploy time (container filename ≠ `uid`, two primary containers, a committed
+secret, a `stripped_prefix`/`baseUrlPath` mismatch, resources outside the platform caps).
 
-## Template layout
+## Repository layout
 
 ```
 lab-exercise-app-template/
-├── copier.yml        # the questions + _subdirectory: template
-├── SPEC.md           # authoritative spec for working on the template itself
+├── copier.yml                  # the questions
 ├── README.md                   # this file
 ├── GETTING-STARTED-ADALAB.md   # step-by-step for the AdaLab lab terminal
 ├── DECISIONS.md      # decisions taken where the specs were silent/ambiguous
 ├── HANDOVER.md       # build report across the base spec + Addendum A + Addendum B
-└── template/         # the stamped app contents (rendered into the output path)
+└── template/
+    └── {{project_slug}}/   # the app that gets stamped out
 ```
 
 ## Design principles
@@ -163,8 +243,5 @@ lab-exercise-app-template/
    columns across years.
 4. **One visual identity**: CPDSE colours live only in `core/theme.py`.
 
-See `SPEC.md` for how to work on the template, and `Lab_Exercise_App_Template_Spec.md`,
-`..._Addendum_A.md`, `..._Addendum_B.md` for the full specification (later documents win).
-Note: unlike the monorepo's per-prospect templates, this template's CPDSE identity is
-**fixed** (no branding questions) — a deliberate requirement of the CPDSE spec, with the
-artwork in `template/assets/`. See the divergences section of `SPEC.md`.
+See `Lab_Exercise_App_Template_Spec.md`, `..._Addendum_A.md` and `..._Addendum_B.md` for the
+full specification (Addendum B wins on conflicts).

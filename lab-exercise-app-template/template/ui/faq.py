@@ -8,7 +8,6 @@ from core.config import settings
 from core.db import get_session
 from core.errors import CoreError
 
-from . import _components as C
 
 
 def render() -> None:

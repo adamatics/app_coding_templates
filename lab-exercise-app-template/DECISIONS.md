@@ -5,19 +5,26 @@ each. Newest at the bottom of each section.
 
 ## Addendum B — Streamlit switch (supersedes React where conflicting)
 
-- **§B1 deployment check (done FIRST) — finding: Streamlit needs `stripped_prefix: FALSE` +
-  `--server.baseUrlPath=<app_url>`.** No AdaLab tenant is reachable from this environment, so
-  I proved the same properties on a local equivalent: hello-world Streamlit run with
-  `--server.baseUrlPath apps/hello`, fronted by a passthrough TCP proxy. Verified under the
-  prefix: HTML 200, JS/font/favicon 200, `/_stcore/health` ok, and the WebSocket
-  `/_stcore/stream` completes the 101 handshake **and survives the proxy hop**. Converse
-  proven: a request without the prefix (what a *stripping* proxy would deliver) → 404. So
-  Streamlit's router requires the prefix on incoming requests; the proxy must forward it.
-  **This overrides Addendum B's "retain stripped_prefix: true"** — B1 is exactly the check to
-  discover this, and B1 itself says "if assets don't resolve, set --server.baseUrlPath" (which
-  requires non-stripping). `.adalab/app.json` therefore sets `stripped_prefix: false`, and the
-  container runs Streamlit with `--server.baseUrlPath=<project_slug>`. Real AdaLab proxy WS
-  behaviour is not verifiable here (no tenant) — flagged in HANDOVER.
+- **§B1 deployment check (done FIRST) — first finding, later REVERSED: see the next bullet.**
+  No AdaLab tenant was reachable from this environment, so I proved the properties on a local
+  equivalent: hello-world Streamlit with `--server.baseUrlPath apps/hello` behind a passthrough
+  TCP proxy. Under the prefix: HTML 200, JS/font/favicon 200, `/_stcore/health` ok, WebSocket
+  101 and held open across the proxy hop; without the prefix, 404. I concluded that the proxy
+  must forward the prefix, i.e. `stripped_prefix: false`.
+- **REVERSAL — the app serves at the container ROOT with `stripped_prefix: true` (default).**
+  The prefix-aware setup deployed to a real tenant and failed Test with
+  `CONTAINER_READINESS_FAILED: Unexpected status code: 404`: the extension probes `/` on the
+  container, and `--server.baseUrlPath=<slug>` makes `/` a 404. The experiment I had not run —
+  app at the root behind a *stripping* proxy — works completely: page 200, assets 200,
+  WebSocket connected, and `/` answers 200 for the probe. It works because Streamlit emits
+  **relative** asset URLs, so the browser resolves them against the prefixed page and the proxy
+  strips them again inbound. Both configurations are internally valid; only the root-serving one
+  also satisfies the Test probe. Rationale for the mistake, recorded deliberately: I verified
+  that the prefix-aware setup *worked* and stopped there, instead of testing whether the app
+  could do without the prefix at all. `.adalab/app.json` now keeps `stripped_prefix: true`, the
+  Containerfile sets `ENV BASE_URL_PATH=""` and applies the flag only when non-empty
+  (`${BASE_URL_PATH:+--server.baseUrlPath=$BASE_URL_PATH}`), and the escape hatch is the old
+  pairing. Long-session WebSocket behaviour through the tenant's own ingress remains unverified.
 - **Architecture (§B1, non-negotiable):** `core/` framework-free (imports streamlit NOWHERE,
   proven by a test), `pages/` thin Streamlit chassis UI, `exercise/` the seam (Python, may use
   streamlit), `app.py` entry/gate/nav.
@@ -161,9 +168,54 @@ this template depends on — the plugin is internal and is not reproduced here.
 - **Kept the fail-loud storage check rather than the platform's generic `ensure_volume_ready`
   pattern**, which does `mkdir(parents=True)` first. On an unmounted path that silently creates
   a container-local directory — precisely the data-loss mode this template exists to prevent.
-- **`stripped_prefix: false` is now corroborated**, not just inferred from my §B1 experiment:
-  the platform's own troubleshooting states the prefix-aware/root-serving choice is
-  all-or-nothing and must not be mixed.
+- **The all-or-nothing prefix rule is corroborated by the platform's own troubleshooting**,
+  which states the prefix-aware/root-serving choice must not be mixed. That rule does not pick
+  between the two; the Test probe does (see the reversal above). The consistency test now
+  enforces the pairing in both directions rather than hard-coding one of them.
+
+## Navigation (fix: Streamlit published the internals as pages)
+
+- **Symptom, reported from a live deployment:** the sidebar offered students `login`,
+  `register`, `session_url` and `components` alongside the real pages, each with its own URL.
+- **Cause:** the UI package was called `pages/`. Streamlit enters magic multipage mode from
+  the directory *name* alone — `PagesManager.uses_pages_directory =
+  Path(main_script_parent / "pages").exists()` — and then publishes every module in it as a
+  page. `app.py`'s docstring claimed deep-linking was impossible because the app does its own
+  navigation; that claim was false for as long as the directory was called `pages/`.
+- **Fix: renamed the package to `ui/`.** This is a deliberate divergence from Addendum B's
+  wording (`pages/` = "thin Streamlit UI"): the addendum's architectural intent is preserved
+  exactly, only the directory name changes, and the name it specifies is reserved by the
+  framework. `tests/test_navigation.py` fails if a `pages/` directory reappears, and
+  `CLAUDE.md` warns agents not to "fix" the name back.
+- **Menu redesign, same report.** A student's menu is now the exercise only — Data capture,
+  Data analysis, FAQ — with "My group" and "Admin" under a collapsed **More** expander.
+  Registration became a forced full-screen step between the course gate and the exercise
+  rather than a nav entry: an unregistered student has no group, so nothing they submitted
+  could be attributed, and after the first visit registration is never needed again. The
+  landing page after registering is Data capture. Rationale: the menu should list what a
+  student does, not how the app is built.
+- **`index=None` on the nav radio** while a secondary page is open, so the sidebar never
+  highlights "Data capture" when the student is actually on Admin.
+
+## Missing import shipped to a deployment (fix: two new guard tests)
+
+- **Symptom:** `NameError: name 'events' is not defined` at `app.py:37`, on every page, on the
+  first real page load. `events.setup_logging()` was added to `_bootstrap()` when the logging
+  framework went in; the import was not.
+- **Why 144 tests missed it:** nothing imported `app.py` (the unit tests exercise `core/`),
+  and the call sits inside a function, so even an import-smoke test would not have caught it.
+- **Fix 1 — `tests/test_imports_and_globals.py`:** imports every module, then disassembles
+  each one and checks that every `LOAD_GLOBAL` resolves against the module namespace plus
+  builtins. `LOAD_GLOBAL` is the precise instrument — attribute names never appear, so there
+  are no false positives from method calls. Verified by reintroducing the bug: it fails with
+  `app looks up names that do not exist: line 37: events`. A test in the same file proves the
+  check itself still detects that pattern, so the guard cannot rot into a no-op.
+- **Fix 2 — `tests/test_app_renders.py`:** runs the real Streamlit script through
+  `streamlit.testing.v1.AppTest` and walks the student's path — gate, registration, each page.
+  It fails on a rendered error-boundary notice as well as on an exception, because `main()`
+  catches page errors and shows a friendly message that would otherwise read as a clean run.
+- **Rationale for both:** the failure was not "a bug in a page" but "no test ever started the
+  app". A static check plus an end-to-end render test close that class, not just this instance.
 
 ## Preview mode (fix: AdaLab Test could never pass)
 
@@ -310,6 +362,8 @@ earlier backend `<base href>`/`window.__BASE_PATH__` injection was removed.
   low-harm. The `local_container_<n>.json` filename suffix matches the internal `uid` (=1),
   per the extension's globbing rule. `stripped_prefix: true` matches the runtime base-path
   design (AdaLab's own "strip prefix" uses `X-Forwarded-Prefix` — exactly what the app reads).
+  *(React-era entry. The value `true` survived the Streamlit switch, via the reversal above,
+  for a different reason: Streamlit's relative asset URLs plus the Test probe on `/`.)*
 - **`access_level: "logged_in"` in app.json** (a confirmed-valid value) with the README
   instructing deployers to set the app ACL to **Public** for students without AdaLab
   accounts. Rationale: ship a definitely-valid manifest; open student access is a one-line

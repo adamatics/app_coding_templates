@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from core import admin, cohorts, db, events, export, identity
+from core import cohorts, db, events, export, identity
 from core import results as R
 from core.db import SessionLocal
 from core.errors import ConflictError

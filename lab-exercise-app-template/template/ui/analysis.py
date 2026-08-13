@@ -13,7 +13,6 @@ from core import admin, analysis as core_analysis, events, exercise_bridge, expo
 from core import results as results_core
 from core.config import settings
 from core.db import get_session
-from core.errors import CoreError
 from core.models import Answer, Member
 from exercise import analysis as seam_analysis
 

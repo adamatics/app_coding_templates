@@ -29,7 +29,7 @@ dev = [
 # core/ is framework-free and is the seed of the shared library later apps will depend on
 # (§B1), so it is packaged alongside the Streamlit UI and the exercise seam.
 [tool.setuptools]
-packages = ["core", "pages", "exercise"]
+packages = ["core", "ui", "exercise"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

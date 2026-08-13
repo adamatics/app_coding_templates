@@ -27,7 +27,7 @@ Do this:
    - the chart candidates (if numeric) — add a `core.plots` call in `exercise/analysis.py`
      if they want it plotted, which also gives it a "Show the code" panel.
 
-Do **not** edit `core/`, `pages/`, `app.py`, the Containerfile or the `.adalab/` config — they
+Do **not** edit `core/`, `ui/`, `app.py`, the Containerfile or the `.adalab/` config — they
 are chassis and the guard blocks them. If you find yourself wanting to, re-read
 `.claude/skills/lab-exercise-app/references/chassis-vs-seam.md`.
 
