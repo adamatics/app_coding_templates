@@ -56,12 +56,8 @@ You should see `copier 9.x`.
 
 ```bash
 cd ~
-git clone --branch add-lab-exercise-app-template \
-  https://github.com/adamatics/app_coding_templates.git
+git clone https://github.com/adamatics/app_coding_templates.git
 ```
-
-> **Why `--branch`?** The template is still on a review branch and hasn't been merged. Once it
-> is, you can drop that line and clone normally.
 
 Check it arrived:
 
@@ -171,27 +167,101 @@ The app stores everything on an **AdaLab Shared Volume**, and **it will refuse t
 without one** — that is deliberate, so a redeploy can never silently wipe a year of student
 results.
 
-1. **Create a volume** on the AdaLab **Volumes** page (name, size in GB, access control). At
-   some institutions only an admin can do this — check early.
-2. **Fix its permissions once**, from a lab terminal — a new volume looks fine but every write
-   fails until you do:
+### The CPDSE volume
+
+You do **not** need to create a volume. One already exists for all CPDSE course apps:
+
+| | |
+| --- | --- |
+| **Name** | `CPDSE Course App Data` |
+| **Volume ID** | `6` |
+| **Size** | 20 GB (fixed at creation) |
+| **Owner** | `sune` |
+| **Mount path to use** | `lab-data` |
+
+**Every CPDSE lab-exercise app mounts this same volume.** Each app writes into its own
+subdirectory named after its slug, so they never collide:
+
+```
+/asv-mnt/lab-data/
+├── titration-lab/      results.sqlite · results.csv · events.jsonl · documents/ · exports/
+├── logp-lab/           …
+└── spectroscopy-lab/   …
+```
+
+That is also what makes a student's history reachable across the course's apps — one volume,
+many apps, one place to look.
+
+### Mount it in the App Deployment wizard
+
+On the **primary container**, add one row under **Volume mounts**:
+
+| Control | Value |
+| --- | --- |
+| **Volume** | `CPDSE Course App Data (20 GB)` |
+| **Mount path** | `lab-data` — the part *after* `/asv-mnt/`. No leading slash, no trailing slash (a trailing slash is rejected). |
+| **Read only** | **off** — the app must write |
+| **Fast mount** | **on** |
+
+Fast Mount is required, not optional: SQLite over a plain network mount is slow and can
+corrupt under load. It is a property of *this app's attachment*, so every course app can Fast
+Mount the same volume independently.
+
+Also set the environment variables in the wizard — **never in `.adalab/`**:
+
+| Variable | Value |
+| --- | --- |
+| `COURSE_PASSWORD` | the password you give the class, rotated each semester |
+| `ADMIN_PASSWORD` | your admin password for the Admin page |
+
+If you or an agent edits `.adalab/local_container_1.json` by hand instead, the row is:
+
+```json
+"volume_mounts": [
+  {"volume_id": 6, "mount_path": "lab-data", "read_only": false, "direct": true}
+]
+```
+
+### One-time: fix the volume's filesystem permissions
+
+**This has not been done yet** — the volume has never been mounted. Until someone does it,
+every write from every app fails with `PermissionError` while the ACL and the wizard both
+look perfectly healthy.
+
+It only needs doing **once, ever, by one person** (Sune or another volume owner), not by each
+teacher:
+
+1. Mount `CPDSE Course App Data` in a lab.
+2. Open a terminal in that lab and run:
+
    ```bash
    cd ~/asv-mnt
-   sudo chown root:$NB_GROUP <Volume_Name>
-   sudo chmod 775 <Volume_Name>
+   sudo chown root:$NB_GROUP CPDSE_Course_App_Data
+   sudo chmod 775 CPDSE_Course_App_Data
    ```
-   `<Volume_Name>` is the volume's name with spaces replaced by underscores — run
-   `ls ~/asv-mnt` to see it.
-3. **Open the app in the AdaLab VS Code extension** and run **Test → Build → Deploy**, in that
-   order. Skipping Build breaks a first deployment.
-4. In the deployment step, mount the volume on the primary container with mount path
-   **`lab-data`**, *Read only* **off**, *Fast mount* **on**, and set the environment variables
-   `COURSE_PASSWORD` and `ADMIN_PASSWORD`.
 
-The full runbook, including what to do when something goes wrong, is in your app's own
-`README.md` under *Persistent storage*.
+Note the directory name: **spaces in the volume name become underscores**, so
+`CPDSE Course App Data` appears as `CPDSE_Course_App_Data`. Run `ls ~/asv-mnt` if in doubt. A
+newly attached volume can take ~2 minutes to appear in a running lab.
 
----
+*(AdaLab 1.6 is expected to make this implicit. Your instance already reports 1.6.0 — try a
+deploy first, and only run the chmod if writes fail.)*
+
+### Deploy
+
+Use the AdaLab VS Code extension in this order: **Test → Build → Deploy**. Skipping Build
+breaks a first-time deploy.
+
+**Test needs no volume.** With no volume and no `COURSE_PASSWORD`, the app starts in
+**preview mode** on scratch space and says so on every screen — that is how you check it
+renders. Nothing can be collected in that state, because students cannot sign in without the
+course password.
+
+### Verify
+
+Open the deployed app, sign in with the course password, register as a test student, submit
+one result, then redeploy and check it is still there. Take a backup from
+**Admin → Export → Download database** before your first real class.
 
 ## If you get stuck
 
