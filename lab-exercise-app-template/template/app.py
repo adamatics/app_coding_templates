@@ -91,6 +91,16 @@ def main() -> None:
 
     _restore_session()
 
+    # Preview mode: no volume mounted and no course password, so the app is running on
+    # scratch space (see core/config.py). Say so on every screen — including the gate —
+    # so nobody mistakes a Test run for a working deployment.
+    if settings.preview_mode:
+        C.notice(
+            "<b>Preview mode — not for students.</b> No storage volume is mounted, so "
+            "anything entered here is lost when the app stops. Set "
+            "<code>COURSE_PASSWORD</code> and mount the Shared Volume before using this "
+            "with a class.", "err")
+
     # Course gate (§B2) — everything below requires it.
     if not st.session_state.get("gate_ok"):
         login.render()

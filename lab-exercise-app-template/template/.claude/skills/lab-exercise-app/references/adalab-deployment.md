@@ -73,7 +73,20 @@ scheduling problem, not a technical one.
 ### 2. The one-time chmod (the single most common failure)
 
 A new volume has ACL access but no filesystem permissions: the ACL is green, the mount
-succeeds, and every write still raises `PermissionError`. Once per volume, from a lab terminal:
+succeeds, and every write still raises `PermissionError`.
+
+Note there are **two distinct mount actions**, each with its own mount path, and they do not
+have to match:
+
+| | Where | Mount path | Result |
+| --- | --- | --- | --- |
+| **Lab** | burger menu → Volumes → **Mount** | pre-filled with the volume name, spaces as underscores (e.g. `CPDSE_Course_App_Data`) | `~/asv-mnt/<that>` — for browsing and the chmod. "Mount from root" checked gives `/asv-mnt/<that>` instead; "Read only" must be unchecked to chmod. |
+| **App** | App Deployment wizard → Volume mounts | whatever the app expects — `lab-data` for this template | `/asv-mnt/lab-data`, matching `DATA_DIR` |
+
+Doing one does not do the other. If a user says "I mounted it", ask which — and if writes
+fail, check the app's mount path matches `DATA_DIR`, not the lab's.
+
+Attach it to a lab first, then run once per volume from a lab terminal:
 
 ```bash
 cd ~/asv-mnt
@@ -81,7 +94,19 @@ sudo chown root:$NB_GROUP <Volume_Name>
 sudo chmod 775 <Volume_Name>
 ```
 
-`$NB_GROUP` is `adalab-users` on most installations. **`<Volume_Name>` is the volume's name
+`$NB_GROUP` is `adalab-users` on most installations.
+
+**Do not misread the output.** `sudo: unable to send audit message: Operation not permitted`
+is sudo failing to reach the audit log inside a container — the command still runs. And a
+subsequent bare `chmod` returning `Operation not permitted` means the `chown` *succeeded*
+(root owns it now). Diagnose from the result, not the noise:
+
+```bash
+ls -ld ~/asv-mnt/<Volume_Name>    # want: drwxrwsr-x root adalab-users
+```
+
+Group must be `adalab-users` (or whatever `$NB_GROUP` holds) with group write. If it shows
+`root root`, `$NB_GROUP` was empty — re-run naming the group explicitly. **`<Volume_Name>` is the volume's name
 with spaces replaced by underscores** — `CPDSE Lab Data` → `CPDSE_Lab_Data`; tell the user to
 `ls ~/asv-mnt` rather than guess. A lab set to "Mount from Root" sees `/asv-mnt/...` instead.
 A newly attached volume can take ~2 minutes to appear in a running lab.

@@ -7,6 +7,7 @@ disposable container-local storage. Only the per-app subdirectory inside it is c
 """
 from __future__ import annotations
 
+import os
 import textwrap
 from collections.abc import Iterator
 
@@ -52,6 +53,13 @@ def require_writable_data_dir() -> None:
     """Verify the shared-volume mount exists and is writable. NEVER create DATA_DIR itself;
     only create this app's subdirectory inside the mounted volume."""
     data_dir = settings.data_dir
+    if settings.preview_mode:
+        # Storage was relocated to scratch space at import because nothing can be
+        # collected without a course password (see core/config.py). Still create the
+        # per-app subdirectories so the app runs.
+        settings.app_data_dir.mkdir(parents=True, exist_ok=True)
+        settings.exports_dir.mkdir(parents=True, exist_ok=True)
+        return
     hint = (
         f"Mount the AdaLab Shared Volume at {data_dir} (Fast Mount ON) and chmod it once "
         f"(see README). e.g. locally: docker run -v ./lab-data:{data_dir} ..."
@@ -65,10 +73,12 @@ def require_writable_data_dir() -> None:
         """).strip())
     if not data_dir.is_dir():
         raise StorageError(f"DATA_DIR exists but is not a directory: {data_dir}")
-    probe = data_dir / ".write-probe"
+    # Unique per app and process — several course apps share one volume (§B6), and a fixed
+    # probe name lets two simultaneous starts delete each other's file.
+    probe = data_dir / f".write-probe-{settings.project_slug}-{os.getpid()}"
     try:
         probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
+        probe.unlink(missing_ok=True)
     except OSError as exc:
         raise StorageError(textwrap.dedent(f"""
             DATA_DIR is not writable: {data_dir} ({exc})

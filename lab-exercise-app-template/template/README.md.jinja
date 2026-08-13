@@ -204,7 +204,17 @@ A two-step wizard:
 A brand-new volume has ACL access but **no filesystem permissions**. The ACL shows green, the
 mount succeeds, the wizard is happy — and every write fails with `PermissionError`.
 
-Mount the volume in a **lab**, open a terminal, and run it once per volume:
+First attach the volume to your **lab** so you can reach it: **burger menu → Volumes**, find
+the volume, click **Mount**. In the dialog keep the pre-filled **Mount path** (the volume name
+with spaces as underscores), leave **Mount from root** unchecked (so it lands at `~/asv-mnt/…`)
+and leave **Read only** unchecked (or the `chmod` below will fail).
+
+This is a different action from mounting the volume into an *app* in the App Deployment
+wizard, and the two mount paths are independent — in your lab it is
+`~/asv-mnt/<Volume_Name>`, while the app mounts the same volume at `lab-data`. Doing one does
+not do the other. A new attachment can take ~2 minutes to appear in a running lab.
+
+Then, in a lab terminal, run it once per volume:
 
 ```bash
 cd ~/asv-mnt
@@ -213,6 +223,10 @@ sudo chmod 775 <Volume_Name>
 ```
 
 `$NB_GROUP` resolves to `adalab-users` on most installations.
+
+`sudo: unable to send audit message` is harmless container noise — the command still runs.
+Check the result rather than the warnings: `ls -ld ~/asv-mnt/<Volume_Name>` should show group
+`adalab-users` with group write (`drwxrwsr-x root adalab-users`).
 
 **`<Volume_Name>` is the volume's name with spaces replaced by underscores** — a volume called
 `CPDSE Lab Data` appears as `~/asv-mnt/CPDSE_Lab_Data`. `ls ~/asv-mnt` to see the real name.

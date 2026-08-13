@@ -165,6 +165,25 @@ this template depends on — the plugin is internal and is not reproduced here.
   the platform's own troubleshooting states the prefix-aware/root-serving choice is
   all-or-nothing and must not be mixed.
 
+## Preview mode (fix: AdaLab Test could never pass)
+
+- **Symptom:** the extension's Test step builds fine, starts the container, and it exits
+  immediately — `CONTAINER_READINESS_FAILED` after 5 attempts. Test runs the image with
+  `"Env": []` and no volume mounts, purely to check the app serves; the fail-loud storage
+  guard then correctly refused to start. So the app could never pass the documented
+  Test → Build → Deploy order.
+- **Fix:** the safety property is not "a volume must always be mounted", it is "student data
+  must never land on disposable storage". Students cannot reach any page without
+  `COURSE_PASSWORD` (the gate fails closed), so nothing can be collected without it. Therefore:
+  `COURSE_PASSWORD` set → a writable volume is **required** (fail loud, unchanged);
+  `COURSE_PASSWORD` unset → run on scratch space in **preview mode**, announced in the
+  container log and as a banner on every screen.
+- The dangerous case — a real deployment that forgets the volume — still refuses to start.
+  Verified in containers for all three cases, and pinned by three tests.
+- Rationale for choosing the course password as the sentinel rather than an opt-out env var:
+  Test sets *no* environment at all, so any opt-out flag would have to default to permissive,
+  which would defeat the guard entirely.
+
 ## Schema and export review (post-B)
 
 - **`Member` carries a denormalised `cohort_id` + `UniqueConstraint(cohort_id, kuid_key)`.**

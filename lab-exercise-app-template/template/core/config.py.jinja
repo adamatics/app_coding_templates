@@ -7,6 +7,7 @@ and owns a per-app subdirectory under it, so a KUID's history across apps stays 
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,6 +53,10 @@ class Settings:
     session_ttl_days: int = field(
         default_factory=lambda: max(1, int(os.environ.get("SESSION_TTL_DAYS", "30")))
     )
+    # Set at import when no volume is mounted AND no course password is configured:
+    # the app runs on scratch space so AdaLab's Test step can start it. Never true
+    # for a deployment that can actually collect data. See _resolve_storage below.
+    preview_mode: bool = False
     # Streamlit --server.baseUrlPath: AdaLab serves at /apps/<app_url>/ with stripped_prefix
     # FALSE (see §B1 finding), so Streamlit must know its prefix. Defaults to the slug.
     base_url_path: str = field(default_factory=lambda: os.environ.get("BASE_URL_PATH", {{ project_slug | tojson }}))
@@ -89,3 +94,52 @@ class Settings:
 
 
 settings = Settings()
+
+
+# --- preview mode: how Test can run without a volume, safely -----------------
+# AdaLab's Test step starts the container with no volume and no environment
+# variables, purely to check that the app serves. A hard "no volume, no start"
+# rule would make Test impossible, and Test → Build → Deploy is the required
+# order.
+#
+# The safety property is not "a volume must always be mounted" — it is "student
+# data must never land on disposable storage". Students cannot reach any page,
+# let alone submit, unless COURSE_PASSWORD is set: the gate fails closed. So:
+#
+#   COURSE_PASSWORD set  ->  a real, writable volume is REQUIRED (fail loud)
+#   COURSE_PASSWORD unset ->  nothing can be collected, so run on scratch space
+#                             and say so loudly (preview mode)
+#
+# A real deployment that forgets the volume still refuses to start, which is the
+# case that actually loses a year of results.
+def _storage_is_usable(path: Path) -> bool:
+    try:
+        if not path.is_dir():
+            return False
+        # Unique per app and process: several course apps share one volume, so a fixed
+        # probe name means two containers starting at once delete each other's probe and
+        # one wrongly concludes the volume is unwritable (and refuses to start).
+        probe = path / f".write-probe-{settings.project_slug}-{os.getpid()}"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _resolve_storage() -> None:
+    configured = settings.data_dir
+    if _storage_is_usable(configured):
+        return                       # normal case: the volume is there
+    if settings.gate_enabled:
+        return                       # real deployment: let preflight fail loud
+    preview_dir = Path(tempfile.gettempdir()) / f"{settings.project_slug}-preview"
+    try:
+        preview_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:                  # pragma: no cover - nothing writable at all
+        return
+    object.__setattr__(settings, "data_dir", preview_dir)
+    object.__setattr__(settings, "preview_mode", True)
+
+
+_resolve_storage()
