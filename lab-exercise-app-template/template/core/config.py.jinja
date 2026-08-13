@@ -57,9 +57,10 @@ class Settings:
     # the app runs on scratch space so AdaLab's Test step can start it. Never true
     # for a deployment that can actually collect data. See _resolve_storage below.
     preview_mode: bool = False
-    # Streamlit --server.baseUrlPath: AdaLab serves at /apps/<app_url>/ with stripped_prefix
-    # FALSE (see §B1 finding), so Streamlit must know its prefix. Defaults to the slug.
-    base_url_path: str = field(default_factory=lambda: os.environ.get("BASE_URL_PATH", {{ project_slug | tojson }}))
+    # Streamlit --server.baseUrlPath. Empty by default: the app serves at the container root
+    # and AdaLab strips the /apps/<app_url> prefix before forwarding. Set this (and flip
+    # stripped_prefix to false) only if your platform forwards the prefix intact.
+    base_url_path: str = field(default_factory=lambda: os.environ.get("BASE_URL_PATH", ""))
 
     @property
     def institution_name(self) -> str:

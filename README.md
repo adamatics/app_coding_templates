@@ -41,7 +41,11 @@ tests in `lab-exercise-app-template`, and worth copying into any new template:
   on the tenant.
 - **The URL prefix is all-or-nothing.** An app is either prefix-aware with
   `stripped_prefix: false`, or serves at the root with `stripped_prefix: true` — never mixed,
-  or static assets 404 and websockets fail to connect.
+  or static assets 404 and websockets fail to connect. **Prefer serving at the root**: the
+  extension's Test step probes `/` on the container and expects a 2xx, so a prefix-aware app
+  fails it with `CONTAINER_READINESS_FAILED: Unexpected status code: 404` before it ever
+  reaches a deploy. Root-serving works whenever the framework emits *relative* asset URLs
+  (Streamlit does; Vite needs `base: './'`).
 - **Persistence means an AdaLab Shared Volume (ASV)** — and the volume is a **separate resource
   the app developer must create**, not something deploying or the VS Code extension does for
   them. This is the most common reason a first deployment doesn't work, so document it in every

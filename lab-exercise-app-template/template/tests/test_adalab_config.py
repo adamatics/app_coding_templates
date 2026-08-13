@@ -79,17 +79,30 @@ def test_access_control_is_coherent():
     assert app["idp_enabled"] is False and app["idp_scope"] is None
 
 
-def test_stripped_prefix_matches_how_streamlit_is_served():
-    """Streamlit is run with --server.baseUrlPath, so the prefix must NOT be stripped.
+def test_prefix_handling_is_internally_consistent():
+    """The two valid configurations must never be mixed.
 
-    The platform's rule is: either the app is prefix-aware and stripped_prefix is false, or it
-    serves at the root and stripped_prefix is true — never mixed. Mixing gives 404s on assets
-    and a websocket that will not connect. See HANDOVER §B1.
+    Either the proxy strips the prefix and the app serves at the root (Streamlit's asset URLs
+    are relative, so they still resolve), or the proxy forwards the prefix and the app is told
+    its baseUrlPath. Mixing them 404s every asset and the websocket never connects.
+
+    Serving at the root additionally keeps the extension's Test step working: it probes "/" on
+    the container and expects 2xx, which a baseUrlPath-configured app answers with 404.
     """
-    assert _load("app.json")["stripped_prefix"] is False
+    stripped = _load("app.json")["stripped_prefix"]
     containerfile = (ADALAB.parent / "Containerfile").read_text(encoding="utf-8")
-    assert "--server.baseUrlPath" in containerfile, (
-        "stripped_prefix is false, so the app must be told its prefix")
+    # The flag is applied only when BASE_URL_PATH is non-empty.
+    default_base = re.search(r'^ENV BASE_URL_PATH=(.*)$', containerfile, re.M)
+    assert default_base, "Containerfile should set a BASE_URL_PATH default"
+    base_is_empty = default_base.group(1).strip() in ('""', "''", "")
+
+    if stripped:
+        assert base_is_empty, (
+            "stripped_prefix is true, so the app must serve at the root — leave "
+            "BASE_URL_PATH empty")
+    else:
+        assert not base_is_empty, (
+            "stripped_prefix is false, so the app must be told its prefix via BASE_URL_PATH")
 
 
 # --- container files --------------------------------------------------------

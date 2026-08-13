@@ -5,19 +5,26 @@ each. Newest at the bottom of each section.
 
 ## Addendum B — Streamlit switch (supersedes React where conflicting)
 
-- **§B1 deployment check (done FIRST) — finding: Streamlit needs `stripped_prefix: FALSE` +
-  `--server.baseUrlPath=<app_url>`.** No AdaLab tenant is reachable from this environment, so
-  I proved the same properties on a local equivalent: hello-world Streamlit run with
-  `--server.baseUrlPath apps/hello`, fronted by a passthrough TCP proxy. Verified under the
-  prefix: HTML 200, JS/font/favicon 200, `/_stcore/health` ok, and the WebSocket
-  `/_stcore/stream` completes the 101 handshake **and survives the proxy hop**. Converse
-  proven: a request without the prefix (what a *stripping* proxy would deliver) → 404. So
-  Streamlit's router requires the prefix on incoming requests; the proxy must forward it.
-  **This overrides Addendum B's "retain stripped_prefix: true"** — B1 is exactly the check to
-  discover this, and B1 itself says "if assets don't resolve, set --server.baseUrlPath" (which
-  requires non-stripping). `.adalab/app.json` therefore sets `stripped_prefix: false`, and the
-  container runs Streamlit with `--server.baseUrlPath=<project_slug>`. Real AdaLab proxy WS
-  behaviour is not verifiable here (no tenant) — flagged in HANDOVER.
+- **§B1 deployment check (done FIRST) — first finding, later REVERSED: see the next bullet.**
+  No AdaLab tenant was reachable from this environment, so I proved the properties on a local
+  equivalent: hello-world Streamlit with `--server.baseUrlPath apps/hello` behind a passthrough
+  TCP proxy. Under the prefix: HTML 200, JS/font/favicon 200, `/_stcore/health` ok, WebSocket
+  101 and held open across the proxy hop; without the prefix, 404. I concluded that the proxy
+  must forward the prefix, i.e. `stripped_prefix: false`.
+- **REVERSAL — the app serves at the container ROOT with `stripped_prefix: true` (default).**
+  The prefix-aware setup deployed to a real tenant and failed Test with
+  `CONTAINER_READINESS_FAILED: Unexpected status code: 404`: the extension probes `/` on the
+  container, and `--server.baseUrlPath=<slug>` makes `/` a 404. The experiment I had not run —
+  app at the root behind a *stripping* proxy — works completely: page 200, assets 200,
+  WebSocket connected, and `/` answers 200 for the probe. It works because Streamlit emits
+  **relative** asset URLs, so the browser resolves them against the prefixed page and the proxy
+  strips them again inbound. Both configurations are internally valid; only the root-serving one
+  also satisfies the Test probe. Rationale for the mistake, recorded deliberately: I verified
+  that the prefix-aware setup *worked* and stopped there, instead of testing whether the app
+  could do without the prefix at all. `.adalab/app.json` now keeps `stripped_prefix: true`, the
+  Containerfile sets `ENV BASE_URL_PATH=""` and applies the flag only when non-empty
+  (`${BASE_URL_PATH:+--server.baseUrlPath=$BASE_URL_PATH}`), and the escape hatch is the old
+  pairing. Long-session WebSocket behaviour through the tenant's own ingress remains unverified.
 - **Architecture (§B1, non-negotiable):** `core/` framework-free (imports streamlit NOWHERE,
   proven by a test), `pages/` thin Streamlit chassis UI, `exercise/` the seam (Python, may use
   streamlit), `app.py` entry/gate/nav.
@@ -161,9 +168,10 @@ this template depends on — the plugin is internal and is not reproduced here.
 - **Kept the fail-loud storage check rather than the platform's generic `ensure_volume_ready`
   pattern**, which does `mkdir(parents=True)` first. On an unmounted path that silently creates
   a container-local directory — precisely the data-loss mode this template exists to prevent.
-- **`stripped_prefix: false` is now corroborated**, not just inferred from my §B1 experiment:
-  the platform's own troubleshooting states the prefix-aware/root-serving choice is
-  all-or-nothing and must not be mixed.
+- **The all-or-nothing prefix rule is corroborated by the platform's own troubleshooting**,
+  which states the prefix-aware/root-serving choice must not be mixed. That rule does not pick
+  between the two; the Test probe does (see the reversal above). The consistency test now
+  enforces the pairing in both directions rather than hard-coding one of them.
 
 ## Preview mode (fix: AdaLab Test could never pass)
 
@@ -310,6 +318,8 @@ earlier backend `<base href>`/`window.__BASE_PATH__` injection was removed.
   low-harm. The `local_container_<n>.json` filename suffix matches the internal `uid` (=1),
   per the extension's globbing rule. `stripped_prefix: true` matches the runtime base-path
   design (AdaLab's own "strip prefix" uses `X-Forwarded-Prefix` — exactly what the app reads).
+  *(React-era entry. The value `true` survived the Streamlit switch, via the reversal above,
+  for a different reason: Streamlit's relative asset URLs plus the Test probe on `/`.)*
 - **`access_level: "logged_in"` in app.json** (a confirmed-valid value) with the README
   instructing deployers to set the app ACL to **Public** for students without AdaLab
   accounts. Rationale: ship a definitely-valid manifest; open student access is a one-line

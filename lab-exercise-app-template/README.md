@@ -50,28 +50,25 @@ identically (the *chassis*) and differ only in the exercise-specific parts (the 
 > instead — a step-by-step walkthrough for the lab terminal, from installing Copier to
 > deploying, with a check after every step. No GitHub account needed; the repo is public.
 
-Copier has no `--directory`/monorepo-subdir flag (that is a cookiecutter feature), so stamp
-by pointing Copier at this template's subdirectory of a clone:
-
 ```bash
-git clone git@github.com:adamatics/app_coding_templates.git
-copier copy app_coding_templates/lab-exercise-app-template ./my-exercise --trust
+copier copy gh:cpdse/lab-exercise-app-template ./exercises --trust
 ```
 
-The app is generated directly in `./my-exercise/`. Then:
+The app is generated at `./exercises/<project_slug>/`. Then:
 
 ```bash
-cd my-exercise
-podman build -t my-exercise .
+cd exercises/<project_slug>
+podman build -t <project_slug> .
 mkdir -p ./lab-data
 podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
-  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me my-exercise
-# open http://localhost:8000/my-exercise/
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me <project_slug>
+# open http://localhost:8000/
 ```
 
-Note the URL prefix: Streamlit is run with `--server.baseUrlPath`, and `.adalab/app.json` sets
-`stripped_prefix: false`, because Streamlit needs the prefix on incoming requests (verified —
-see `HANDOVER.md` §B1).
+Note the URL prefix: the app serves at the **container root** and `.adalab/app.json` keeps
+AdaLab's default `stripped_prefix: true`. Streamlit emits relative asset URLs, so everything
+resolves correctly under `/apps/<slug>/` once the proxy strips the prefix — and the container
+still answers `/`, which the extension's Test step requires. See `HANDOVER.md` §B1.
 
 ## Before an app can run: the Shared Volume
 
@@ -137,21 +134,24 @@ disable the guard. Documented only here, not in the stamped app.
 DATA_DIR=$(mktemp -d) python -m pytest -q      # 138 tests
 ```
 
-The suite includes the three load-bearing checks: `core/` imports with **no streamlit
+The suite includes the three load-bearing checks — `core/` imports with **no streamlit
 installed**, every plot's "Show the code" **runs standalone** against an exported CSV, and
-**60 simultaneous sessions** submit without error or cross-session leakage.
+**60 simultaneous sessions** submit without error or cross-session leakage — plus a
+`.adalab/` integrity suite that catches the deployment mistakes which otherwise only surface
+at build or deploy time (container filename ≠ `uid`, two primary containers, a committed
+secret, a `stripped_prefix`/`baseUrlPath` mismatch, resources outside the platform caps).
 
-## Template layout
+## Repository layout
 
 ```
 lab-exercise-app-template/
-├── copier.yml        # the questions + _subdirectory: template
-├── SPEC.md           # authoritative spec for working on the template itself
+├── copier.yml                  # the questions
 ├── README.md                   # this file
 ├── GETTING-STARTED-ADALAB.md   # step-by-step for the AdaLab lab terminal
 ├── DECISIONS.md      # decisions taken where the specs were silent/ambiguous
 ├── HANDOVER.md       # build report across the base spec + Addendum A + Addendum B
-└── template/         # the stamped app contents (rendered into the output path)
+└── template/
+    └── {{project_slug}}/   # the app that gets stamped out
 ```
 
 ## Design principles
@@ -163,8 +163,5 @@ lab-exercise-app-template/
    columns across years.
 4. **One visual identity**: CPDSE colours live only in `core/theme.py`.
 
-See `SPEC.md` for how to work on the template, and `Lab_Exercise_App_Template_Spec.md`,
-`..._Addendum_A.md`, `..._Addendum_B.md` for the full specification (later documents win).
-Note: unlike the monorepo's per-prospect templates, this template's CPDSE identity is
-**fixed** (no branding questions) — a deliberate requirement of the CPDSE spec, with the
-artwork in `template/assets/`. See the divergences section of `SPEC.md`.
+See `Lab_Exercise_App_Template_Spec.md`, `..._Addendum_A.md` and `..._Addendum_B.md` for the
+full specification (Addendum B wins on conflicts).

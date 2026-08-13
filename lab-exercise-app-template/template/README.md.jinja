@@ -90,7 +90,7 @@ podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
   -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
 ```
 
-Then open http://localhost:8000/{{ project_slug }}/
+Then open http://localhost:8000/
 
 ## Tech stack
 
@@ -161,14 +161,20 @@ because platform logs are aggregated more widely. Set `LOG_PII=true` to include 
 stdout too. Logging is best-effort by design — a failing log sink can never block a student's
 submission.
 
-### URL prefix (important)
+### URL prefix
 
-Streamlit must know the sub-path it is served under, and it needs that prefix on incoming
-requests. So this app sets **`stripped_prefix: false`** in `.adalab/app.json` and runs
-Streamlit with `--server.baseUrlPath=$BASE_URL_PATH` (defaulting to the app slug). Verified
-locally: with the prefix in place the page, static assets, fonts and the Streamlit
-**websocket** all resolve; without it they 404. If a future AdaLab version strips the prefix
-instead, set `BASE_URL_PATH=""` and flip `stripped_prefix` back to `true`.
+AdaLab serves the app at `/apps/<app_url>/` and, with the default **`stripped_prefix: true`**,
+removes that prefix before forwarding. The app therefore serves at the **container root** and
+is not told any base path.
+
+That works because Streamlit emits *relative* asset URLs (`./static/…`, `./_stcore/stream`):
+the browser resolves them against the prefixed page, and the proxy strips the prefix again on
+the way in. Verified end to end, including the WebSocket. It also keeps the extension's **Test**
+step working, which probes `/` on the container and expects a 2xx.
+
+The two configurations must never be mixed. If a platform ever forwards the prefix intact,
+set `BASE_URL_PATH` to that prefix **and** flip `stripped_prefix` to `false` — a test checks
+the two stay consistent.
 
 ### Persistent storage: the Shared Volume (do this before the first class)
 
@@ -311,7 +317,8 @@ stale state.
 
 Note on the URL prefix: the platform rule is that an app is either prefix-aware with
 `stripped_prefix: false`, or serves at the root with `stripped_prefix: true` — never mixed.
-Streamlit is prefix-aware via `--server.baseUrlPath`, so this app uses the former.
+This app serves at the root, because Streamlit's asset URLs are relative and because the
+extension's Test step probes `/`.
 
 ```yaml
 asset: app

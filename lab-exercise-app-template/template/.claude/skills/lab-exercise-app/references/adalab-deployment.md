@@ -36,19 +36,25 @@ wizard, not in `.adalab/`. Anyone who can read the repo can read the manifest.
 **Resources.** CPU cap 2 cores, RAM cap 2000 MB. The scaffold default of 500 MB is too tight
 for Streamlit + pandas + plotly + PDF rendering; this app ships `max_ram: 1500`.
 
-## The URL prefix (why `stripped_prefix` is false here)
+## The URL prefix (the app serves at the root)
 
-AdaLab serves apps at `/apps/<app_url>/`. The platform rule is: either the app is
-**prefix-aware** and the prefix is **not** stripped, or the app serves at the root and the
-prefix **is** stripped. **Never mix** — mixing gives 404s on static assets and a websocket
-that will not connect.
+AdaLab serves apps at `/apps/<app_url>/`. There are exactly two valid setups and they must
+never be mixed:
 
-Streamlit is prefix-aware via `--server.baseUrlPath`, which this app sets from
-`BASE_URL_PATH` (defaulting to the slug). So `.adalab/app.json` sets
-**`stripped_prefix: false`**. A test asserts the two stay consistent.
+| Setup | `stripped_prefix` | App | Verdict |
+| --- | --- | --- | --- |
+| Proxy strips the prefix, app at the root | `true` (default) | no `--server.baseUrlPath` | **What this app uses** |
+| Proxy forwards the prefix, app is prefix-aware | `false` | `--server.baseUrlPath=apps/<url>` | Escape hatch only |
 
-If a future platform version strips the prefix regardless, the fix is one line each:
-`BASE_URL_PATH=""` and `stripped_prefix: true`.
+The root setup works because Streamlit emits **relative** asset URLs (`./static/…`,
+`./_stcore/stream`): the browser resolves them against the prefixed page and the proxy strips
+them again inbound. Page, assets and WebSocket all verified.
+
+It is also the only setup compatible with the extension's **Test** step, which probes `/` on
+the container and expects a 2xx. With `--server.baseUrlPath` set, `/` is a 404 and Test fails
+with `CONTAINER_READINESS_FAILED: Unexpected status code: 404`.
+
+`tests/test_adalab_config.py` asserts the two settings stay consistent in both directions.
 
 ## Persistence: the Shared Volume (ASV)
 
