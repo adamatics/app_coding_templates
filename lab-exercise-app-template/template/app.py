@@ -141,6 +141,29 @@ def main() -> None:
                    detail={"error": str(exc)[:500]})
         st.stop()
 
+    # No usable volume, but a course password is set — so somebody could otherwise sign in
+    # and submit a result onto storage that disappears with the container. The app comes up
+    # (Test has to be able to start it, and a deployer needs to see why in the browser) and
+    # then admits nobody. Nothing below this line runs: no gate, no registration, no capture.
+    if settings.storage_blocked:
+        C.header(settings.exercise_title, settings.course_code)
+        C.notice(
+            "<b>This app has no storage volume, so it is not open.</b><br>"
+            "Results submitted now would be lost the next time the app restarts, so the "
+            "course sign-in stays closed until a volume is attached.<br><br>"
+            "<b>If you are a student:</b> nothing is wrong with your work — tell your "
+            "instructor the app says it has no storage volume.<br>"
+            f"<b>If you are the instructor:</b> mount the AdaLab Shared Volume at "
+            f"<code>{settings.configured_data_dir or settings.data_dir}</code> (Fast Mount on) "
+            "and redeploy. To run without a volume on purpose — a trial, a demo — set "
+            "<code>STORAGE_MODE=local</code>; data then lives on local disk and is erased on "
+            "every redeploy.", "err")
+        with get_session() as session:
+            events.log(session, "startup_storage_unavailable", level=events.ERROR,
+                       detail={"configured_data_dir": str(settings.configured_data_dir)})
+        C.footer(settings.institution_name, settings.contact_email)
+        return
+
     _restore_session()
 
     # Preview mode: no volume mounted and no course password, so the app is running on

@@ -204,8 +204,10 @@ warns on every screen, at startup, and on the Export tab, and records `storage_m
 `app_started` event. If you run a real session this way, export from **More → Admin**
 afterwards: that download is the only copy.
 
-Without this variable a missing volume still aborts startup. That guard is the reason a
-forgotten mount cannot quietly cost a year of results.
+Without this variable, a missing volume does not abort startup — it **blocks the app**. It
+starts and serves (the extension's Test step must be able to probe it), shows the reason on
+screen, and never opens the course gate, so not one result can be written to storage that is
+about to vanish. That is the guarantee: nothing collectable, rather than nothing running.
 
 ### Persistent storage: the Shared Volume (do this before the first class)
 

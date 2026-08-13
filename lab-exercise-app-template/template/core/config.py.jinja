@@ -57,6 +57,13 @@ class Settings:
     # the app runs on scratch space so AdaLab's Test step can start it. Never true
     # for a deployment that can actually collect data. See _resolve_storage below.
     preview_mode: bool = False
+    # Set with preview_mode when a course password IS configured: the app starts and serves,
+    # but refuses to admit anyone, because a submission would be written to storage that is
+    # about to disappear. See _resolve_storage below.
+    storage_blocked: bool = False
+    # DATA_DIR as configured, kept because _resolve_storage may redirect data_dir to scratch
+    # space — and the path the deployer actually needs to fix is the configured one.
+    configured_data_dir: Path | None = None
     # "volume" (default) requires a mounted AdaLab Shared Volume and refuses to start
     # without one. "local" writes to DATA_DIR as an ordinary directory, creating it if
     # needed — for running on a laptop or in a lab, or for a short trial where nobody has
@@ -120,22 +127,25 @@ class Settings:
 settings = Settings()
 
 
-# --- preview mode: how Test can run without a volume, safely -----------------
-# AdaLab's Test step starts the container with no volume and no environment
-# variables, purely to check that the app serves. A hard "no volume, no start"
-# rule would make Test impossible, and Test → Build → Deploy is the required
-# order.
+# --- running without a volume, safely ----------------------------------------
+# AdaLab's Test step starts the container with no volume mounts, purely to check that the app
+# serves. A hard "no volume, no start" rule makes Test impossible, and Test -> Build -> Deploy
+# is the required order.
 #
-# The safety property is not "a volume must always be mounted" — it is "student
-# data must never land on disposable storage". Students cannot reach any page,
-# let alone submit, unless COURSE_PASSWORD is set: the gate fails closed. So:
+# The safety property was never "a volume must always be mounted" — it is "student data must
+# never land on disposable storage". That is enforced by admitting nobody rather than by
+# refusing to boot:
 #
-#   COURSE_PASSWORD set  ->  a real, writable volume is REQUIRED (fail loud)
-#   COURSE_PASSWORD unset ->  nothing can be collected, so run on scratch space
-#                             and say so loudly (preview mode)
+#   volume present                  ->  normal
+#   no volume, STORAGE_MODE=local   ->  deliberate; ordinary disk, loud warnings everywhere
+#   no volume, no COURSE_PASSWORD   ->  preview: usable for looking around, nothing collectable
+#   no volume, COURSE_PASSWORD set  ->  BLOCKED: starts, serves, admits nobody
 #
-# A real deployment that forgets the volume still refuses to start, which is the
-# case that actually loses a year of results.
+# The last line used to be "refuse to start", keyed on the password being unset as a proxy for
+# "this is Test". That proxy broke when the passwords were declared in
+# .adalab/local_container_1.json: Test then supplies one, the guard fired, and the container
+# exited with CONTAINER_READINESS_FAILED. Blocking holds the same guarantee without depending
+# on how the deploy config happens to be filled in.
 def _storage_is_usable(path: Path) -> bool:
     try:
         if not path.is_dir():
@@ -152,6 +162,28 @@ def _storage_is_usable(path: Path) -> bool:
 
 
 def _resolve_storage() -> None:
+    """Decide where this process writes, and whether it may collect anything at all.
+
+    Three outcomes, and the third one is the interesting one:
+
+    * **The volume is there** — normal. Nothing to do.
+    * **No volume, ``STORAGE_MODE=local``** — deliberate. Create the directory and run.
+    * **No volume, storage expected** — the app runs on scratch space but is *blocked*: it
+      starts, serves, and refuses to let anybody sign in.
+
+    The blocked state replaces an earlier design that refused to start unless
+    ``COURSE_PASSWORD`` was unset. That used "no password" as a proxy for "this is the
+    extension's Test step, so nothing can be collected" — and the proxy broke the moment the
+    passwords were declared in ``.adalab/local_container_1.json``, because Test then supplies
+    one and the container exits with ``CONTAINER_READINESS_FAILED``.
+
+    Blocking is a better guarantee than refusing to boot, not a weaker one. What actually
+    matters is that **no result is ever written to storage that is about to vanish**; a
+    process that starts but admits nobody satisfies that by construction, whatever env it was
+    handed. It also means Test can always start the container, and a deployer who forgets the
+    volume sees the reason in the browser rather than a crash-looping container with the
+    explanation buried in a log.
+    """
     configured = settings.data_dir
     if settings.local_storage:
         # Opt-in local disk: DATA_DIR is an ordinary directory, so create it rather than
@@ -165,15 +197,20 @@ def _resolve_storage() -> None:
         return
     if _storage_is_usable(configured):
         return                       # normal case: the volume is there
-    if settings.gate_enabled:
-        return                       # real deployment: let preflight fail loud
+
     preview_dir = Path(tempfile.gettempdir()) / f"{settings.project_slug}-preview"
     try:
         preview_dir.mkdir(parents=True, exist_ok=True)
     except OSError:                  # pragma: no cover - nothing writable at all
         return
+    object.__setattr__(settings, "configured_data_dir", configured)
     object.__setattr__(settings, "data_dir", preview_dir)
     object.__setattr__(settings, "preview_mode", True)
+    # A course password means someone could sign in and submit. With no durable storage
+    # underneath, that submission would be lost — so the app admits nobody until the volume
+    # is there. Without a password nothing can be collected anyway, so the app stays usable
+    # for looking around, which is what the Test step and a local preview want.
+    object.__setattr__(settings, "storage_blocked", settings.gate_enabled)
 
 
 _resolve_storage()

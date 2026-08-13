@@ -75,6 +75,29 @@ Other variables (`DATA_DIR`, `COURSE_ID`, `EXERCISE_TITLE`, `CONTACT_EMAIL`,
 `ALLOW_SCHEMA_MISMATCH`) are read too, but are not pre-declared: they have working defaults
 from the Copier answers and adding them to the wizard is noise. Add a row when you need one.
 
+### Why Test passes without a volume
+
+The extension's Test step runs the container with the `.adalab` environment variables and
+**no volume mounts**. The app therefore cannot have a hard "no volume, no start" rule — Test
+would never pass, and Test → Build → Deploy is the required order.
+
+What the app guarantees instead is stricter and simpler: **no result is ever written to
+storage that is about to vanish.** With no usable volume and a `COURSE_PASSWORD` set, the app
+starts, serves, and **admits nobody** — the course gate never opens, so nothing can be
+submitted. A deployer who forgot the volume sees the reason in the browser instead of a
+crash-looping container.
+
+| Situation | What happens |
+| --- | --- |
+| Volume mounted | Normal |
+| No volume, `STORAGE_MODE=local` | Deliberate: ordinary disk, loud warnings, not durable |
+| No volume, no `COURSE_PASSWORD` | Preview: usable for looking around, nothing collectable |
+| No volume, `COURSE_PASSWORD` set | **Blocked**: starts and serves, admits nobody |
+
+This replaced an earlier rule that refused to start unless `COURSE_PASSWORD` was unset — a
+proxy for "this is Test". Declaring the passwords in `local_container_1.json` broke it: Test
+supplies one, the guard fired, and Test failed with `CONTAINER_READINESS_FAILED`.
+
 **The two passwords ship empty on purpose.** A value committed here is a working credential in
 a public repository for an app deployed with `access_level: public` — anyone could sign in as a
 student, and with the admin password, export every student's name and KUID. Set them in the
