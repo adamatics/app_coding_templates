@@ -38,16 +38,29 @@ def main() -> int:
 
     from .db import SessionLocal
 
-    if settings.preview_mode:
+    if settings.storage_blocked:
+        # Starts, serves, admits nobody. The container has to come up — the extension's Test
+        # step probes it, and a deployer needs to see the reason in the browser — but nothing
+        # may be collected onto storage that is about to vanish.
+        sys.stderr.write(
+            "\n=== NO STORAGE VOLUME — THE APP WILL ADMIT NOBODY ===\n"
+            f"DATA_DIR ({settings.configured_data_dir}) is not a mounted, writable volume,\n"
+            "and a COURSE_PASSWORD is set, so students could otherwise sign in and submit\n"
+            "results that would be lost.\n"
+            "The app starts and explains this on screen, but the course gate stays shut.\n\n"
+            "To fix, either:\n"
+            "  * mount the AdaLab Shared Volume at that path (Fast Mount ON), or\n"
+            "  * set STORAGE_MODE=local to use ordinary disk on purpose (not durable).\n\n"
+            "This is expected during the extension's Test step, which runs without volumes.\n\n"
+        )
+    elif settings.preview_mode:
         sys.stderr.write(
             "\n=== PREVIEW MODE — NOT FOR STUDENTS ===\n"
             f"No volume is mounted at the configured DATA_DIR, so the app is running on\n"
             f"scratch space at {settings.data_dir}. Anything written here is LOST when the\n"
             "container stops.\n"
-            "This is allowed only because COURSE_PASSWORD is unset, so no student can sign\n"
-            "in and nothing can be collected. Set COURSE_PASSWORD and mount the Shared\n"
-            "Volume before using this with a class — the app will then refuse to start\n"
-            "without the volume.\n\n"
+            "No COURSE_PASSWORD is set, so nobody can sign in and nothing can be collected.\n"
+            "Mount the Shared Volume before using this with a class.\n\n"
         )
 
     if settings.local_storage:

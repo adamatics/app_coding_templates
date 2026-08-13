@@ -181,11 +181,18 @@ The app does not let this pass quietly:
 - a notice on **Admin → Export** saying the download is the only lasting copy
 - `storage_mode` and `storage_is_durable` recorded in the `app_started` event
 
-**It is never reached by accident.** Without `STORAGE_MODE=local`, a missing volume still
-aborts startup — that is the guard that stops a forgotten mount silently writing a year of
-results into a container that the next redeploy throws away. The abort message names this
-escape hatch, so nobody has to guess. `tests/test_storage.py` pins all of it, including that
-local mode *still* fails loud when the directory it was pointed at cannot be written.
+**It is never reached by accident.** Without `STORAGE_MODE=local`, a missing volume leaves the
+app **blocked**: it starts and serves — the extension's Test step runs the container with no
+volumes and must be able to probe it — but the course gate never opens, so not one result can
+be written to storage that is about to vanish. The on-screen message and the container log both
+name this escape hatch, so nobody has to guess.
+
+That is deliberately a stronger guarantee than refusing to boot, and it does not depend on how
+the deploy config happens to be filled in. An earlier version keyed it on `COURSE_PASSWORD`
+being unset, as a proxy for "this is Test" — and the proxy broke the moment the passwords were
+declared in `.adalab/local_container_1.json`, failing Test with `CONTAINER_READINESS_FAILED`.
+`tests/test_storage.py` pins every case, including that local mode *still* fails loud when the
+directory it was pointed at cannot be written.
 
 To move to a volume later: mount the ASV, unset `STORAGE_MODE`, and copy your last export in
 via the Admin page (or drop the SQLite file into the volume's `<app-slug>/` subdirectory).

@@ -76,19 +76,22 @@ def test_per_app_subdirectory_used(session):
     assert settings.csv_path.parent == settings.app_data_dir
 
 
-def test_preflight_exits_nonzero_when_volume_missing(tmp_path):
-    """The container entrypoint runs `python -m core.preflight` BEFORE streamlit, so a bad
-    volume must exit non-zero. Otherwise Streamlit binds the port and serves an app whose
-    writes all fail — the exact 'looks fine, loses a year of data' failure mode (§A3)."""
+def test_preflight_names_the_missing_volume(tmp_path):
+    """The container entrypoint runs `python -m core.preflight` BEFORE streamlit, so whatever
+    is wrong with storage is stated in the log at startup rather than discovered on first use.
+
+    A missing volume no longer exits non-zero — see
+    `test_test_step_config_still_starts_the_container` for why — but the log must still name
+    the path that needs fixing.
+    """
     import subprocess
     import sys
 
-    env = dict(os.environ, DATA_DIR=str(tmp_path / "not-mounted"))
+    env = dict(os.environ, DATA_DIR=str(tmp_path / "not-mounted"), COURSE_PASSWORD="lab2026")
     proc = subprocess.run([sys.executable, "-m", "core.preflight"], capture_output=True,
                           text=True, env=env, cwd=str(Path(db.__file__).parent.parent))
-    assert proc.returncode != 0, "preflight must fail when the volume is missing"
-    assert "STARTUP ABORTED" in proc.stderr
-    assert "not-mounted" in proc.stderr
+    assert "not-mounted" in proc.stderr, "the log must name the path the deployer must fix"
+    assert "ADMIT NOBODY" in proc.stderr
 
 
 def test_preflight_succeeds_on_a_mounted_volume(tmp_path):
@@ -129,16 +132,22 @@ def test_no_volume_and_no_course_password_starts_in_preview_mode(tmp_path):
     assert "storage OK" in proc.stdout
 
 
-def test_no_volume_WITH_course_password_still_fails_loud(tmp_path):
-    """The dangerous case is unchanged: a real deployment that forgets the volume."""
+def test_no_volume_WITH_course_password_admits_nobody(tmp_path):
+    """The dangerous case, handled differently but no more permissively.
+
+    A deployment that forgets the volume used to refuse to start. It now starts and blocks:
+    the gate never opens, so not one result can be written to storage that is about to
+    vanish. The guarantee is the same — nothing collectable — and it no longer depends on
+    whether COURSE_PASSWORD happens to be set, which is what broke the Test step.
+    """
     proc = _preflight({
         "DATA_DIR": str(tmp_path / "never-mounted"),
         "COURSE_PASSWORD": "lab2026",
         "ADMIN_PASSWORD": "admin",
     })
-    assert proc.returncode != 0, "a course that can collect data must require a real volume"
-    assert "STARTUP ABORTED" in proc.stderr
-    assert "never-mounted" in proc.stderr
+    assert proc.returncode == 0, f"the container must come up so Test can probe it:\n{proc.stderr}"
+    assert "ADMIT NOBODY" in proc.stderr
+    assert "never-mounted" in proc.stderr, "and name the path that needs fixing"
 
 
 def test_preview_mode_is_off_when_the_volume_exists(tmp_path):
@@ -247,10 +256,11 @@ def test_local_mode_is_off_unless_asked_for(tmp_path):
         "COURSE_PASSWORD": "course-secret",
         "DEMO_MODE": "false",
     })
-    assert proc.returncode != 0, "without STORAGE_MODE=local a missing volume must abort"
-    assert "STARTUP ABORTED" in proc.stderr
+    assert "ADMIT NOBODY" in proc.stderr, (
+        "without STORAGE_MODE=local a missing volume must block the app, not quietly write "
+        "to disposable storage")
     assert "STORAGE_MODE=local" in proc.stderr, \
-        "the failure should name the deliberate escape hatch, so nobody has to guess"
+        "the message should name the deliberate escape hatch, so nobody has to guess"
 
 
 def test_local_mode_still_fails_loud_on_an_unwritable_directory(tmp_path):
@@ -285,3 +295,96 @@ def test_durability_flag_matches_the_mode(tmp_path):
             "local disk is not durable — the banner and the export warning depend on this"
     finally:
         object.__setattr__(live, "storage_mode", original)
+
+
+# --- the Test step, with passwords declared in .adalab ----------------------
+#
+# The regression that broke a real Test run. Preview mode used to be keyed on COURSE_PASSWORD
+# being unset, as a proxy for "this is the extension's Test step, so nothing can be collected".
+# Declaring the passwords in .adalab/local_container_1.json broke the proxy: Test supplies one,
+# the fail-loud guard fired, and the container exited —
+#
+#     CONTAINER_READINESS_FAILED: Container titration-lab is not ready
+#
+# The container must always be able to start. The guarantee that matters — no result is ever
+# written to storage that is about to vanish — is now kept by admitting nobody instead.
+def test_test_step_config_still_starts_the_container(tmp_path):
+    """Exactly what the extension runs: passwords set, STORAGE_MODE=volume, no volume."""
+    proc = _preflight({
+        "DATA_DIR": str(tmp_path / "never-mounted"),
+        "COURSE_PASSWORD": "1234",
+        "ADMIN_PASSWORD": "1234",
+        "STORAGE_MODE": "volume",
+        "DEMO_MODE": "false",
+        "SESSION_TTL_DAYS": "30",
+        "LOG_PII": "false",
+    })
+    assert proc.returncode == 0, (
+        "the container must start with the .adalab defaults and no volume — otherwise the "
+        f"extension's Test step fails before a deploy is ever attempted:\n{proc.stderr}")
+    assert "ADMIT NOBODY" in proc.stderr, "and it must say why, in the container log"
+    assert "STORAGE_MODE=local" in proc.stderr, "and name the deliberate way to run without one"
+
+
+def test_no_volume_with_a_password_blocks_the_app(tmp_path):
+    """Starts, but nothing can be collected: the gate never opens."""
+    import subprocess
+    import sys
+    from pathlib import Path as _P
+
+    env = dict(os.environ)
+    env.update({
+        "DATA_DIR": str(tmp_path / "never-mounted"),
+        "COURSE_PASSWORD": "1234",
+        "DEMO_MODE": "false",
+    })
+    probe = (
+        "from core.config import settings;"
+        "print('blocked', settings.storage_blocked);"
+        "print('preview', settings.preview_mode);"
+        "print('durable', settings.storage_is_durable)"
+    )
+    proc = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                          env=env, cwd=str(_P(db.__file__).parent.parent))
+    assert "blocked True" in proc.stdout, proc.stdout + proc.stderr
+    assert "durable False" in proc.stdout
+
+
+def test_no_volume_without_a_password_is_preview_not_blocked(tmp_path):
+    """Nothing can be collected anyway, so the app stays usable for looking around."""
+    import subprocess
+    import sys
+    from pathlib import Path as _P
+
+    env = dict(os.environ)
+    env.update({
+        "DATA_DIR": str(tmp_path / "never-mounted"),
+        "COURSE_PASSWORD": "",
+        "DEMO_MODE": "false",
+    })
+    probe = ("from core.config import settings;"
+             "print('blocked', settings.storage_blocked);"
+             "print('preview', settings.preview_mode)")
+    proc = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                          env=env, cwd=str(_P(db.__file__).parent.parent))
+    assert "blocked False" in proc.stdout, proc.stdout + proc.stderr
+    assert "preview True" in proc.stdout
+
+
+def test_a_mounted_volume_is_never_blocked(tmp_path):
+    """The normal case must be untouched by any of this."""
+    import subprocess
+    import sys
+    from pathlib import Path as _P
+
+    env = dict(os.environ)
+    env.update({"DATA_DIR": str(tmp_path), "COURSE_PASSWORD": "1234", "DEMO_MODE": "false"})
+    probe = ("from core.config import settings;"
+             "print('blocked', settings.storage_blocked);"
+             "print('preview', settings.preview_mode);"
+             "print('durable', settings.storage_is_durable)")
+    proc = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                          env=env, cwd=str(_P(db.__file__).parent.parent))
+    assert "blocked False" in proc.stdout, proc.stdout + proc.stderr
+    assert "preview False" in proc.stdout
+    assert "durable True" in proc.stdout
