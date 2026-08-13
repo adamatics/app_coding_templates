@@ -190,6 +190,41 @@ integrity bugs** and four gaps. All fixed and pinned by tests.
 Verified: **106 tests**, container builds and the demo seed still works under the new
 constraint.
 
+## 4d. Branding and AdaLab conformance (latest round)
+
+**CPDSE logo.** The supplied artwork ships in `assets/` and appears deliberately quietly: ~30 px
+in the page header (inside an Ivory chip, because the artwork is Forest-green on transparent and
+would disappear on the Forest band), full size only on the sign-in page, and in the footer of
+exported HTML reports. `core/theme.py` loads it as a data URI, so it works with no static route,
+under any URL prefix, and inside exported documents. Format-agnostic (SVG preferred, raster
+accepted) and a missing file degrades to no image, never an error — replacing the artwork is a
+file drop, no code change. I first hand-drew a recreation; it wasn't accurate enough, so it was
+discarded in favour of the real file.
+
+**AdaLab conformance.** Reviewed `.adalab/` against the platform's app-builder guidance and
+fixed a real bug plus several latent ones:
+
+- **`local_container_demo.json` → `local_container_1.json`.** The filename's integer suffix must
+  equal the `uid` field; naming it after the image is the documented cause of
+  duplicate-container deploys. Addendum A §A2 specified both the `_demo` name *and* `uid: 1`,
+  which cannot both hold — the platform rule wins.
+- **`max_ram` 500 → 1500 MB** — the scaffold default is too tight for Streamlit + pandas +
+  plotly + PDF rendering (cap is 2000).
+- **`project.json` gains `author`/`id`**, with `author` filled from `$LOGNAME` by a copier task.
+- **`project_slug` now validates against the real `app_url` rule** (regex + 63 chars), so a bad
+  slug fails at stamp time rather than at deploy.
+- **`tests/test_adalab_config.py` (16 checks)** encodes the platform's folder-integrity
+  pre-flight and runs with the normal suite. Verified it actually catches: an image-named
+  container file, two primaries, a reserved env var, a committed secret, and a
+  `stripped_prefix`/`baseUrlPath` mismatch.
+
+The §B1 finding is now **corroborated by the platform's own troubleshooting**, which states the
+prefix-aware vs root-serving choice is all-or-nothing — so `stripped_prefix: false` alongside
+`--server.baseUrlPath` is the documented-correct pairing, not just my experiment.
+
+Verified: **138 tests**, container builds and serves under its prefix with the logo inside the
+image. Still not verifiable here: an actual deploy on a live tenant.
+
 ## 5. Base spec §15 acceptance
 
 ✅ verified · 🟡 partial/by-proxy · ⚪ needs a live AdaLab tenant · ➖ superseded

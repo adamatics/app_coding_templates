@@ -56,6 +56,8 @@ which is a teaching requirement (§B7), and the test suite checks the code runs 
 - `references/schema-cookbook.md` — field patterns and what makes a good schema.
 - `references/data-model.md` — identity, cohort and supersede semantics. **Read before doing
   anything with data**, so you never invent a parallel persistence path.
+- `references/adalab-deployment.md` — the `.adalab/` rules, the URL-prefix contract and the
+  Shared Volume runbook. **Read before touching anything under `.adalab/` or deploying.**
 
 ## What NOT to do
 

@@ -31,7 +31,11 @@ identically (the *chassis*) and differ only in the exercise-specific parts (the 
   with fail-loud startup.
 - **"Show the code" panels**: every plot helper returns the figure *and* the standalone
   pandas+plotly code that reproduces it from an exported CSV — a teaching requirement.
-- **Four exports**: CSV, Excel, PDF report, HTML report (data + answers + plots).
+- **Exports**: CSV, Excel, PDF and HTML reports (data + answers + plots), plus an answers
+  CSV, a full workbook and a SQLite backup for the teacher.
+- **Event log** of registrations, submissions, corrections, exports and errors — to the
+  database, stdout and a durable file on the volume.
+- **Course documents**: the teacher uploads the øvelsesvejledning; students download it in-app.
 - **Agent guidance** (`CLAUDE.md`, a `lab-exercise-app` skill, `/new-exercise-field`) and a
   **three-layer guardrail** whose hook actually blocks edits outside the seam.
 
@@ -65,6 +69,46 @@ Note the URL prefix: Streamlit is run with `--server.baseUrlPath`, and `.adalab/
 `stripped_prefix: false`, because Streamlit needs the prefix on incoming requests (verified —
 see `HANDOVER.md` §B1).
 
+## Before an app can run: the Shared Volume
+
+Stamping and deploying is not enough — **every app needs an AdaLab Shared Volume (ASV), and
+the volume is created separately from the app.** This is the step that is not part of the VS
+Code extension and the one that most often blocks a first deployment.
+
+The app **refuses to start without a writable volume**, deliberately: writing to container-local
+storage would work all semester and then lose a year of student results at the next redeploy.
+
+Four steps, in order:
+
+1. **Create the volume** on the AdaLab **Volumes** page — name, description, **size in GB
+   (fixed at creation)**, then access control (**View / Mount / Edit**, hierarchical). *At some
+   institutions only an admin can do this — find out early.*
+2. **Fix the filesystem permissions.** A new volume has ACL access but no filesystem
+   permissions: the mount succeeds and every write still fails with `PermissionError`. Once per
+   volume, from a lab terminal:
+   ```bash
+   cd ~/asv-mnt
+   sudo chown root:$NB_GROUP <Volume_Name>
+   sudo chmod 775 <Volume_Name>
+   ```
+   `<Volume_Name>` is the volume's name **with spaces replaced by underscores**
+   (`CPDSE Lab Data` → `CPDSE_Lab_Data`) — `ls ~/asv-mnt` to check. Becomes implicit in
+   AdaLab v1.6.
+3. **Mount it into the app** in the App Deployment wizard, on the **primary container**:
+   mount path `lab-data` (the part *after* `/asv-mnt/`, no leading or trailing slash),
+   **Read only off**, **Fast Mount on**. The mount path must match `DATA_DIR` — a test in the
+   stamped app checks they agree.
+4. **Verify** — start the app, submit a result, redeploy, confirm it survived.
+
+**Fast Mount is required, not optional:** ASVs are network filesystems, and SQLite over a
+network mount is slow and can corrupt under load. One Fast Mount per app.
+
+One ASV can be mounted into **several course apps at once** (each writes to its own
+subdirectory), which is how a student's history stays reachable across a course.
+
+The stamped app carries the full runbook in its own README, and agents working in the app get
+it from `.claude/skills/lab-exercise-app/references/adalab-deployment.md`.
+
 ## Customising the exercise (the seam)
 
 Inside a stamped app you edit **only these four files**:
@@ -86,7 +130,7 @@ disable the guard. Documented only here, not in the stamped app.
 ## Testing a stamped app
 
 ```bash
-DATA_DIR=$(mktemp -d) python -m pytest -q      # 122 tests
+DATA_DIR=$(mktemp -d) python -m pytest -q      # 138 tests
 ```
 
 The suite includes the three load-bearing checks: `core/` imports with **no streamlit

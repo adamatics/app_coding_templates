@@ -65,6 +65,10 @@ The always-writable zone is the seam: `exercise/**`.
   mounted AdaLab Shared Volume at `$DATA_DIR`. The app **fails loud** if that volume is
   missing — never point `DATA_DIR` at a container-local path to "fix" a startup error.
 - **Comparison views are anonymised** (no KUID or group labels) by design.
+- **`.adalab/` is deployment state**, validated by `tests/test_adalab_config.py`: container
+  filenames must match their `uid`, exactly one primary container, no reserved or secret env
+  vars, and `stripped_prefix` must stay consistent with Streamlit's `--server.baseUrlPath`.
+  See `.claude/skills/lab-exercise-app/references/adalab-deployment.md`.
 
 ## Conventions
 

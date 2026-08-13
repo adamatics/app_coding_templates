@@ -103,10 +103,12 @@ Then open http://localhost:8000/{{ project_slug }}/
 - Visual identity: the fixed CPDSE palette and Verdana typography, defined once in
   `core/theme.py` and applied to both the UI and every plot.
 
-Branding note: this app ships with PLACEHOLDER CPDSE logo artwork (a simple snake mark and
-wordmark in the correct colourways, drawn inline in `pages/_components.py`). Replace with the
-official CPDSE assets before any real use. Body text is Charcoal on Soft White / Ivory Gold
-Tint (both meet WCAG AA); the header uses Soft White on Forest Green as the identity specifies.
+Branding: the CPDSE logo lives in `assets/` and appears deliberately quietly — small in the
+page header, at full size only on the sign-in page, and in the footer of exported HTML reports.
+To change the artwork, replace the file in `assets/` (see `assets/README.md`); no code changes
+are needed, and a missing file degrades to no image rather than an error. Body text is Charcoal
+on Soft White / Ivory Gold Tint (both meet WCAG AA); the header uses Soft White on Forest Green
+as the identity specifies.
 
 ## Dependencies
 
@@ -168,42 +170,134 @@ locally: with the prefix in place the page, static assets, fonts and the Streaml
 **websocket** all resolve; without it they 404. If a future AdaLab version strips the prefix
 instead, set `BASE_URL_PATH=""` and flip `stripped_prefix` back to `true`.
 
-### Persistent storage (deployment prerequisite)
+### Persistent storage: the Shared Volume (do this before the first class)
 
-Everything is stored under `DATA_DIR` (default `/asv-mnt/lab-data`), in a per-app
-subdirectory: SQLite (`results.sqlite`) is the system of record and a long-format
-`results.csv` mirror is rewritten on every submission. The app **refuses to start if that
-path is not a mounted, writable volume** — student data is never written to disposable
-container-local storage.
+Container filesystems are wiped on every redeploy — an **AdaLab Shared Volume (ASV)** is the
+only correct place for student data. This app **refuses to start without one**, on purpose:
+silently writing to container-local storage would look fine all semester and then lose a year
+of results at the next redeploy.
 
-- This is a **single-replica** app: SQLite in WAL mode is a single-instance embedded
-  database. Do **not** scale it horizontally.
-- Persistence uses an **AdaLab Shared Volume (ASV)** with **Fast Mount ON** — required, not an
-  optimization: SQLite over a plain network mount is the wrong shape for write traffic.
-- One ASV is mounted into every course app, so a KUID's history across apps and years stays
-  reachable; each app owns its own subdirectory.
+Everything lives under `DATA_DIR` (default `/asv-mnt/lab-data`) in a per-app subdirectory:
+`results.sqlite` (system of record), `results.csv` (long-format mirror), `events.jsonl` (the
+log), `documents/` (uploads) and `exports/`.
 
-One-time ASV setup runbook (a fresh volume has no filesystem permissions, so writes fail until
-you chmod it — the mount can show green and every write still fails):
+The volume is **not** created by the VS Code extension or by deploying — it is a separate
+resource you create once on the Volumes page. Four steps, in this order:
 
-1. Create the volume on the AdaLab **Volumes** page.
-2. Set its **ACL** (View / Mount / Edit) so you may attach it.
-3. Mount it in a **lab**, open a terminal, and run:
+#### 1. Create the volume (Volumes page)
 
-   ```bash
-   sudo chown root:$NB_GROUP <Volume_Name>
-   sudo chmod 775 <Volume_Name>
-   ```
+A two-step wizard:
 
-4. In the **App Deployment** wizard, mount the volume at mount path `lab-data` (the platform
-   prefixes `/asv-mnt/`) with **Fast Mount ON**.
+- **Information** — *Name* (descriptive, e.g. `CPDSE Lab Data`), *Description* (which apps use
+  it — admin view only), *Size in GB*. **Size is fixed at creation**; only someone with Edit
+  rights can resize it later, so allow for years of results plus uploaded documents. A few GB
+  is generous for this app: measurements are tiny, uploaded PDFs dominate.
+- **Access control** — three independent levels, hierarchical (**Edit ⊃ Mount ⊃ View**), each
+  settable to Public / Logged in / Userlist / Groups. You need **Mount** to attach it to the
+  app, and **Edit** to resize or change the ACL later.
 
-Both layers are required: correct ACL without the chmod means writes fail; correct chmod
-without ACL means you cannot mount. (Expected to become implicit in AdaLab v1.6.)
+> **Depending on your institution's setup, only an admin may be able to create volumes.**
+> Check this well before the first lab session rather than on the morning.
+
+#### 2. Fix the filesystem permissions — the step everyone misses
+
+A brand-new volume has ACL access but **no filesystem permissions**. The ACL shows green, the
+mount succeeds, the wizard is happy — and every write fails with `PermissionError`.
+
+Mount the volume in a **lab**, open a terminal, and run it once per volume:
+
+```bash
+cd ~/asv-mnt
+sudo chown root:$NB_GROUP <Volume_Name>
+sudo chmod 775 <Volume_Name>
+```
+
+`$NB_GROUP` resolves to `adalab-users` on most installations.
+
+**`<Volume_Name>` is the volume's name with spaces replaced by underscores** — a volume called
+`CPDSE Lab Data` appears as `~/asv-mnt/CPDSE_Lab_Data`. `ls ~/asv-mnt` to see the real name.
+(If your lab is set to "Mount from Root" the path is `/asv-mnt/...` instead of `~/asv-mnt/...`.)
+A newly attached volume can take ~2 minutes to appear in a running lab; wait or restart it.
+
+The two layers are independent and you need both: correct ACL without the chmod means writes
+fail; correct chmod without the ACL means you cannot mount at all. *(Expected to become
+implicit in AdaLab v1.6, ~mid-2026. Until your platform is upgraded, this is mandatory.)*
+
+#### 3. Mount it into the app (App Deployment wizard)
+
+Add one row under **Volume mounts** on the **primary container**:
+
+| Control | Value for this app |
+| --- | --- |
+| **Volume** | the ASV you created (the dropdown shows name + size) |
+| **Mount path** | `lab-data` — the part **after** `/asv-mnt/`. No leading slash, no trailing slash (a trailing slash is rejected outright). |
+| **Read only** | **off** — the app must write |
+| **Fast mount** | **on** — see below |
+
+The mount path must match `DATA_DIR`. Ship both as given and they line up at `/asv-mnt/lab-data`;
+if you change one, change the other (a test checks they agree). Note this is independent of the
+volume's *name* — the name only decides what the directory is called inside a lab.
+
+**Fast Mount is required here, not an optimisation.** ASVs are network filesystems by default;
+SQLite over a network mount is slow and can corrupt under load. Fast Mount attaches the volume
+directly, removing the network hop. Constraints: **one Fast Mount per app** (this app is
+single-container, so it takes it), and it is a property of *this attachment* — the same volume
+can be Fast-Mounted here and network-mounted elsewhere.
+
+After deployment you can change a mount in place from the app's kebab menu → **Edit Mount**.
+
+#### 4. Verify
+
+Start the app. If the volume is wrong you get a startup failure naming the path — that is the
+guard working, not a bug. When it starts, submit one result, redeploy, and check it is still
+there. `Admin → Export → Download database` gives you a backup to keep.
+
+#### Sharing one volume across course apps
+
+One ASV can be mounted into **many apps and labs at once**, which is how a KUID's history stays
+reachable across the course's apps: mount the same volume into each, and each app writes to its
+own subdirectory (named after its slug). Use the **same mount path** in every app —
+different paths for the same data is merely confusing. A volume cannot be mounted twice on the
+*same* container.
+
+#### What not to put here
+
+- **Secrets.** `COURSE_PASSWORD` / `ADMIN_PASSWORD` are environment variables set in the deploy
+  wizard. Anyone with Mount rights on the volume can read its files.
+- **Unbounded growth.** The size is fixed at creation. This app's event log rotates, but
+  uploaded documents and years of results do accumulate — check usage between semesters.
+
+Two files appear in every mounted volume and are not yours: `lost+found/` and `.AVI_SUCCESS`.
+The app filters them everywhere it lists volume contents.
+
+#### Single replica
+
+SQLite in WAL mode is a single-instance embedded database. **Do not scale this app
+horizontally** — two replicas over one volume will corrupt it.
 
 ### Deployment order
 
-Deploy in the order **Test → Build → Deploy**. Skipping Build breaks a first-time Deploy.
+Deploy in the order **Test → Build → Deploy**. Skipping Build breaks a first-time Deploy. Set
+`COURSE_PASSWORD`, `ADMIN_PASSWORD` and the volume mount in the wizard at deploy time — never
+commit them to `.adalab/`.
+
+### Before you deploy: check the manifests
+
+```bash
+DATA_DIR=$(mktemp -d) python -m pytest tests/test_adalab_config.py -q
+```
+
+`.adalab/` is deployment state, so the test suite validates it: container filenames must match
+their `uid` field, exactly one primary container, `app_url` within the platform's regex and
+length limit, no reserved or secret environment variables, resources inside the caps, and
+`stripped_prefix` consistent with how Streamlit is served. Each of these otherwise fails at
+build or deploy time. `app_id`, `metadata_id` and `current_image_version` ship as `null` and
+are filled in by the deploy flow — **commit them afterwards**, or the next deploy re-derives
+stale state.
+
+Note on the URL prefix: the platform rule is that an app is either prefix-aware with
+`stripped_prefix: false`, or serves at the root with `stripped_prefix: true` — never mixed.
+Streamlit is prefix-aware via `--server.baseUrlPath`, so this app uses the former.
 
 ```yaml
 asset: app

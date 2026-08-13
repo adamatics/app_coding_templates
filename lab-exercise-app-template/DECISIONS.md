@@ -129,6 +129,42 @@ each. Newest at the bottom of each section.
   what it does, when to use it, and what students see — a teacher configuring the app under
   time pressure reads what's on screen, not a README.
 
+## AdaLab conformance review (against the platform's app-builder guidance)
+
+Reviewed `.adalab/` against the platform's own app-builder reference. Distilled only the rules
+this template depends on — the plugin is internal and is not reproduced here.
+
+- **`local_container_demo.json` → `local_container_1.json` (bug fix).** The platform requires
+  the filename's integer suffix to equal the `uid` field; a file named after the image is the
+  documented cause of duplicate-container deploys ("stop the deploy"). Addendum A §A2 named the
+  file `_demo` while also specifying `uid: 1` — the two can't both hold, and the platform rule
+  wins because it is what the tooling keys off.
+- **`max_ram` 500 → 1500 MB.** 500 is the scaffold default; this container runs Streamlit +
+  pandas + plotly + reportlab + kaleido, and PDF rendering in particular would risk OOM.
+  Platform cap is 2000.
+- **`project.json` gains `author` and `id`.** The platform shape is `{type, author, id}`;
+  Addendum A §A2 showed only `type`. `author` is the owning AdaLab user (LOGNAME), which a
+  template can't know, so a copier `_task` fills it from `$LOGNAME` after generation (Copier
+  has no `env` filter — verified).
+- **`container_file` `./Containerfile` → `Containerfile`, `build_context` `./` → `.`** to match
+  the platform's own scaffold exactly.
+- **`project_slug` validator tightened to the real `app_url` rule**
+  (`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`, ≤ 63 chars). Previously a trailing hyphen or an over-long
+  slug would pass here and fail at deploy time, long after stamping.
+- **`tests/test_adalab_config.py` — 16 checks that run with the normal suite.** Encodes the
+  platform's folder-integrity pre-flight (filename↔uid, unique uids and image names, exactly
+  one primary, `app_id`/`metadata_id` null, valid `app_url`, resource caps, no reserved env
+  vars, no committed secrets, `mount_path` without leading/trailing slash, at most one Fast
+  Mount) plus a check that `stripped_prefix` stays consistent with `--server.baseUrlPath` and
+  that `DATA_DIR` matches the documented mount path. Rationale: every one of these fails *late*,
+  at build or deploy, often in front of a class — a test moves the failure to the repo.
+- **Kept the fail-loud storage check rather than the platform's generic `ensure_volume_ready`
+  pattern**, which does `mkdir(parents=True)` first. On an unmounted path that silently creates
+  a container-local directory — precisely the data-loss mode this template exists to prevent.
+- **`stripped_prefix: false` is now corroborated**, not just inferred from my §B1 experiment:
+  the platform's own troubleshooting states the prefix-aware/root-serving choice is
+  all-or-nothing and must not be mixed.
+
 ## Schema and export review (post-B)
 
 - **`Member` carries a denormalised `cohort_id` + `UniqueConstraint(cohort_id, kuid_key)`.**

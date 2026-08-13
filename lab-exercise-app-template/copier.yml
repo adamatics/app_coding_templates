@@ -26,6 +26,14 @@ _skip_if_exists:
 # app into its own git repo (Addendum §A4). Tolerant of environments without git.
 _tasks:
   - "chmod +x .claude/hooks/chassis_guard.py .claude/hooks/format.py .claude/hooks/session_start.py || true"
+  # .adalab/project.json records the AdaLab user who owns the app-builder project. Copier has
+  # no env filter, so fill it from $LOGNAME here when the answer was left blank.
+  - >-
+    python3 -c "import json,os,pathlib;
+    p=pathlib.Path('.adalab/project.json');
+    d=json.loads(p.read_text());
+    d['author']=d.get('author') or os.environ.get('LOGNAME') or os.environ.get('USER') or '';
+    p.write_text(json.dumps(d, indent=4)+chr(10))" || true
   - "git init -b main >/dev/null 2>&1 || true"
 
 _message_after_copy: |
@@ -52,17 +60,24 @@ project_name:
 
 project_slug:
   type: str
-  help: Directory / image name (lowercase, hyphenated). Derived from project_name.
+  help: >-
+    Directory / image name AND the AdaLab app URL (served at /apps/<slug>/).
+    Lowercase letters, digits and hyphens; must start and end alphanumeric; max 63 chars.
+    Must be globally unique on the AdaLab tenant — check availability before deploying.
   default: "{{ project_name | lower | trim | replace(' ', '-') | replace('_', '-') | replace('.', '-') }}"
+  # Mirrors AdaLab's app_url rule: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ , max 63 chars.
+  # A slug that fails this is rejected at deploy time, long after stamping — catch it here.
   validator: >-
     {% if not project_slug %}
     project_slug must not be empty.
-    {% elif not project_slug[0].isalpha() %}
-    project_slug must start with a letter.
-    {% elif not (project_slug | replace('-', '')).isalnum() %}
-    project_slug may contain only lowercase letters, digits and hyphens.
+    {% elif project_slug | length > 63 %}
+    project_slug must be 63 characters or fewer (AdaLab app_url limit).
     {% elif project_slug != project_slug | lower %}
     project_slug must be lowercase.
+    {% elif not project_slug[0].isalnum() or not project_slug[-1].isalnum() %}
+    project_slug must start and end with a letter or digit (no leading/trailing hyphen).
+    {% elif not (project_slug | replace('-', '')).isalnum() %}
+    project_slug may contain only lowercase letters, digits and hyphens.
     {% endif %}
 
 exercise_title:
@@ -79,6 +94,13 @@ app_description:
   type: str
   help: One-line description (used in the .adalab manifests and the Gallery card)
   default: "{{ exercise_title }} — a CPDSE student lab-exercise app ({{ course_code }})."
+
+adalab_author:
+  type: str
+  help: >-
+    AdaLab user ID (LOGNAME) that owns the app-builder project — written to
+    .adalab/project.json. Leave blank to fill it from $LOGNAME after generation.
+  default: ""
 
 host_institution:
   type: str
