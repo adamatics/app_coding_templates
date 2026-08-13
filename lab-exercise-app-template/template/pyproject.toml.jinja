@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{ project_slug }}"
+version = "0.1.0"
+description = "{{ app_description }}"
+requires-python = ">=3.11"
+authors = [{ name = "{{ host_institution }}", email = "{{ contact_email }}" }]
+dependencies = [
+    "streamlit>=1.38",
+    "pandas>=2.0",
+    "plotly>=5.20",
+    "lmfit>=1.2",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.6",
+    "openpyxl>=3.1",      # Excel export
+    "reportlab>=4.0",     # PDF report (pure Python, headless — no system libs)
+    "kaleido==0.2.1",     # static plot images for the PDF
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+# core/ is framework-free and is the seed of the shared library later apps will depend on
+# (§B1), so it is packaged alongside the Streamlit UI and the exercise seam.
+[tool.setuptools]
+packages = ["core", "pages", "exercise"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,55 @@
+# CHASSIS. Single-stage, single-process Streamlit app (Addendum B §B1/§B8).
+# The Node/Vite build stage is gone with the React frontend.
+#
+#   podman build -t my-app .          # or: docker build -f Containerfile -t my-app .
+#   podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
+#     -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=x my-app
+#
+# A writable volume MUST be mounted at $DATA_DIR (/asv-mnt/lab-data): the app refuses to
+# start otherwise, so student data is never written to disposable container-local storage.
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DATA_DIR=/asv-mnt/lab-data \
+    APP_PORT=8000 \
+    DEMO_MODE=false
+
+# The URL prefix AdaLab serves this app under (/apps/<app_url>/). Streamlit needs the prefix
+# present on incoming requests (see the §B1 finding), which is why .adalab/app.json sets
+# stripped_prefix:false. Set BASE_URL_PATH="" to serve at the root instead (e.g. if a future
+# platform version strips the prefix before forwarding).
+ENV BASE_URL_PATH={{ project_slug }}
+
+WORKDIR /app
+
+# uv for fast, reproducible installs (§B8).
+RUN pip install --no-cache-dir uv==0.4.27
+
+# Dependencies first (better layer caching): install from pyproject without the project itself.
+COPY pyproject.toml ./
+RUN uv pip install --system --no-cache -r pyproject.toml
+
+COPY core/ ./core/
+COPY pages/ ./pages/
+COPY exercise/ ./exercise/
+COPY assets/ ./assets/
+COPY .streamlit/ ./.streamlit/
+COPY app.py ./
+
+EXPOSE 8000
+
+# Preflight FIRST (fail-loud storage, §A3): if the volume is missing or unwritable the
+# process exits non-zero and Streamlit is never started — the container must not serve an app
+# whose writes all fail. Then exec streamlit.
+#
+# AdaLab serves the app at /apps/<app_url>/. The §B1 check found Streamlit needs the prefix
+# on incoming requests, so app.json sets stripped_prefix:false and we tell Streamlit its
+# base path here. BASE_URL_PATH defaults to the project slug (see core/config.py).
+CMD ["sh", "-c", "python -m core.preflight && exec streamlit run app.py \
+  --server.port=${APP_PORT:-8000} \
+  --server.address=0.0.0.0 \
+  --server.headless=true \
+  --server.baseUrlPath=${BASE_URL_PATH} \
+  --browser.gatherUsageStats=false"]

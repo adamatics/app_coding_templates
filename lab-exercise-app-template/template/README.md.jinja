@@ -1,0 +1,309 @@
+# {{ exercise_title }}
+
+A CPDSE student lab-exercise app for {{ course_code }}. Part of the lab-exercise-app family:
+identical look and behaviour across exercises, durable results across years.
+
+## What it does
+
+Student groups record their measurements for one lab exercise, compare with the rest of the
+class and with previous years, and export a report they keep.
+
+- Students enter a **course password** (no personal account), register with their **KUID**,
+  name and hold, then join or create a group.
+- **Data capture** records measurements; **Data analysis** shows their data, an anonymised
+  comparison at a scope they choose (own, group, neighbouring group, hold, year, all years),
+  the exercise's plots, and the teacher's questions with free-text answer fields.
+- Every plot has a **"Show the code"** panel: plain pandas + plotly a student can paste into a
+  notebook and run against their exported CSV. These are pre-coding courses, so seeing the
+  code is part of the point.
+- **Export** produces CSV, Excel, a PDF report and an HTML report. The report combines the
+  group's data, their answers and the plots — apps get retired and passwords get forgotten,
+  so the export is what students keep.
+- Results are **append-only**: a mistake is fixed with a correction that supersedes the old
+  reading. "Resetting for a new class" closes the year and opens a new one — nothing is
+  deleted, and previous years stay visible and exportable.
+- An **admin area** manages course metadata (banner, FAQ, links, permitted comparison scope),
+  years, groups and exports.
+
+## How to use it
+
+For students:
+
+- Open the app, enter the course password, then register with your KUID (three letters and
+  three digits), your name and your hold, and join or create your group.
+- Go to **Data capture** to record measurements, and **Data analysis** to compare, answer the
+  questions, and download your report. You can come back weeks later while writing it.
+
+For the instructor / admin:
+
+- Open **Admin** and sign in with the admin password (`ADMIN_PASSWORD` at deploy time). Each
+  section of the Admin page explains itself in the app; in short:
+  - **Course name and instructor** — shown on the FAQ page and on every exported report, so a
+    student who finds a PDF months later knows where it came from.
+  - **Message to the class** — a banner on *every* page for *every* student, for things that
+    change mid-session ("use fridge C, A is broken"). Save an empty box to remove it.
+  - **FAQ** — Markdown, for the questions that come back every year. Add to it during the
+    session; when two groups ask the same thing, that's the signal.
+  - **Comparison scope** — the widest comparison students may pick on the analysis page.
+    Comparison views are anonymised regardless. Leave at *all* unless you want groups working
+    independently first.
+  - **Groups on/off** — turn off for individual exercises; don't change it mid-course.
+  - **Documents** — upload the **øvelsesvejledning** and anything else students should be able
+    to download (see below).
+- Open a year for the new class, close it when done, and open the next.
+- Export per year or across all years: **CSV** and **Excel** (measurements), **Answers CSV**,
+  a **full workbook** (results · answers · roster · years · log), and a **SQLite backup**.
+  Take a backup before closing a year or retiring the app. The backup, the roster and the
+  answers contain personal data — store them accordingly.
+
+### Documents students can download
+
+Upload the **øvelsesvejledning** (lab manual), a data sheet or a worked example under
+**Admin → Documents**. They appear on the **FAQ page** and in a *Course documents* panel on
+the **Data capture** page, so a student who forgot the manual can get it while standing at
+the bench. Give each one a title students will recognise and, optionally, a one-line
+description ("Read section 3 before you start").
+
+PDF works best; the limit is 20 MB per file — for anything larger, host it elsewhere and put
+a link in the FAQ. Files live on the course volume, so they survive redeploys and are still
+there next year. They are **not** inside the SQLite backup, so keep your own copies.
+
+### Changing the exercise itself (the seam)
+
+The two pages a teacher defines per course are `exercise/capture.py` (what students enter)
+and `exercise/analysis.py` (what they see afterwards). Both ship as **worked examples with
+inline instructions** explaining their purpose, what to put in them, and the rules that matter
+— read the top of each file before editing. The four seam files:
+
+```
+exercise/schema.py     the measurement fields (storage, CSV and exports follow)
+exercise/capture.py    the DATA ENTRY page — draw inputs, return a dict
+exercise/analysis.py   the ANALYSIS page — return plots built with core.plots
+exercise/content.md    the instructions and the analysis questions
+```
+
+Run it locally (a writable volume MUST be mounted at the data path):
+
+```
+podman build -t {{ project_slug }} .
+podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
+  -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
+```
+
+Then open http://localhost:8000/{{ project_slug }}/
+
+## Tech stack
+
+- Python 3.11, Streamlit, pandas, plotly, lmfit, SQLAlchemy 2, Pydantic v2, SQLite (WAL).
+- Reports: reportlab (PDF) and plotly (HTML); Excel via openpyxl.
+- Single process, single container, port 8000. No Node, no separate API.
+- Architecture: `core/` is framework-free Python and imports Streamlit nowhere (a test
+  enforces it), `pages/` is the thin Streamlit UI, `exercise/` is the per-app seam, `app.py`
+  is the entry point.
+- Visual identity: the fixed CPDSE palette and Verdana typography, defined once in
+  `core/theme.py` and applied to both the UI and every plot.
+
+Branding: the CPDSE logo lives in `assets/` and appears deliberately quietly — small in the
+page header, at full size only on the sign-in page, and in the footer of exported HTML reports.
+To change the artwork, replace the file in `assets/` (see `assets/README.md`); no code changes
+are needed, and a missing file degrades to no image rather than an error. Body text is Charcoal
+on Soft White / Ivory Gold Tint (both meet WCAG AA); the header uses Soft White on Forest Green
+as the identity specifies.
+
+## Dependencies
+
+- A container runtime (Podman or Docker) to build and run the image.
+- A persistent, writable AdaLab Shared Volume mounted at the data path — see Access.
+- No external services, no database server, no student accounts. Versions are pinned in
+  `pyproject.toml`.
+
+## Source
+
+- Repository: <repo URL>
+- Stamped from the `lab-exercise-app` Copier template (CPDSE).
+
+## Access
+
+- Students: no AdaLab account. The **course password** (`COURSE_PASSWORD`, rotated each
+  semester at deploy time) is the access control, so `.adalab/app.json` sets
+  `access_level: "public"`. Identity is self-registration by KUID — there are no per-student
+  passwords.
+- Admin: `ADMIN_PASSWORD`, compared constant-time. If it is unset the admin area is disabled
+  (fail closed). Rotate by redeploying with a new value.
+- Students stay signed in across a page refresh (and when they come back weeks later) via an
+  opaque token in the URL — **no student passwords**. Only a hash of it is stored, it carries
+  no personal data, it expires after `SESSION_TTL_DAYS`, and "Sign out" revokes it
+  immediately. Note the URL is therefore a bearer credential: sharing the link shares the
+  session, exactly as sharing a KUID already allows impersonation under the honour-system model.
+- Environment variables (complete set): `DATA_DIR` (default `/asv-mnt/lab-data`),
+  `COURSE_ID`, `COURSE_PASSWORD`, `ADMIN_PASSWORD`, `DEMO_MODE` (default `false`),
+  `APP_PORT` (default 8000), `BASE_URL_PATH` (default the app slug — see URL prefix below),
+  `SESSION_TTL_DAYS` (default 30), `LOG_PII` (default `false` — see Logging).
+
+### Logging
+
+Every meaningful action is recorded: student registrations (with timestamps), returning
+students, group creation, **every submission**, **every correction** (with the old values, the
+new values and which fields changed), answers saved, exports actually taken, all admin actions,
+and all errors with their tracebacks.
+
+It goes to three places, because each answers a different question:
+
+- **The `event` table** — filterable by level / action / KUID in **Admin → Log**, downloadable
+  as CSV. This is the teacher-facing record of what happened in a lab session.
+- **stdout** — lands in the container / AdaLab log viewer, for whoever is on call.
+- **`$DATA_DIR/<app>/events.jsonl`** — on the shared volume, so the log survives redeploys
+  (stdout does not). Rotated at 5 MB to `events.jsonl.1`.
+
+Personal data handling: the database and the volume log keep the KUID (same data processing
+agreement as the results themselves); **stdout gets a pseudonymous `member:<id>` instead**,
+because platform logs are aggregated more widely. Set `LOG_PII=true` to include KUIDs in
+stdout too. Logging is best-effort by design — a failing log sink can never block a student's
+submission.
+
+### URL prefix (important)
+
+Streamlit must know the sub-path it is served under, and it needs that prefix on incoming
+requests. So this app sets **`stripped_prefix: false`** in `.adalab/app.json` and runs
+Streamlit with `--server.baseUrlPath=$BASE_URL_PATH` (defaulting to the app slug). Verified
+locally: with the prefix in place the page, static assets, fonts and the Streamlit
+**websocket** all resolve; without it they 404. If a future AdaLab version strips the prefix
+instead, set `BASE_URL_PATH=""` and flip `stripped_prefix` back to `true`.
+
+### Persistent storage: the Shared Volume (do this before the first class)
+
+Container filesystems are wiped on every redeploy — an **AdaLab Shared Volume (ASV)** is the
+only correct place for student data. This app **refuses to start without one**, on purpose:
+silently writing to container-local storage would look fine all semester and then lose a year
+of results at the next redeploy.
+
+Everything lives under `DATA_DIR` (default `/asv-mnt/lab-data`) in a per-app subdirectory:
+`results.sqlite` (system of record), `results.csv` (long-format mirror), `events.jsonl` (the
+log), `documents/` (uploads) and `exports/`.
+
+The volume is **not** created by the VS Code extension or by deploying — it is a separate
+resource you create once on the Volumes page. Four steps, in this order:
+
+#### 1. Create the volume (Volumes page)
+
+A two-step wizard:
+
+- **Information** — *Name* (descriptive, e.g. `CPDSE Lab Data`), *Description* (which apps use
+  it — admin view only), *Size in GB*. **Size is fixed at creation**; only someone with Edit
+  rights can resize it later, so allow for years of results plus uploaded documents. A few GB
+  is generous for this app: measurements are tiny, uploaded PDFs dominate.
+- **Access control** — three independent levels, hierarchical (**Edit ⊃ Mount ⊃ View**), each
+  settable to Public / Logged in / Userlist / Groups. You need **Mount** to attach it to the
+  app, and **Edit** to resize or change the ACL later.
+
+> **Depending on your institution's setup, only an admin may be able to create volumes.**
+> Check this well before the first lab session rather than on the morning.
+
+#### 2. Fix the filesystem permissions — the step everyone misses
+
+A brand-new volume has ACL access but **no filesystem permissions**. The ACL shows green, the
+mount succeeds, the wizard is happy — and every write fails with `PermissionError`.
+
+Mount the volume in a **lab**, open a terminal, and run it once per volume:
+
+```bash
+cd ~/asv-mnt
+sudo chown root:$NB_GROUP <Volume_Name>
+sudo chmod 775 <Volume_Name>
+```
+
+`$NB_GROUP` resolves to `adalab-users` on most installations.
+
+**`<Volume_Name>` is the volume's name with spaces replaced by underscores** — a volume called
+`CPDSE Lab Data` appears as `~/asv-mnt/CPDSE_Lab_Data`. `ls ~/asv-mnt` to see the real name.
+(If your lab is set to "Mount from Root" the path is `/asv-mnt/...` instead of `~/asv-mnt/...`.)
+A newly attached volume can take ~2 minutes to appear in a running lab; wait or restart it.
+
+The two layers are independent and you need both: correct ACL without the chmod means writes
+fail; correct chmod without the ACL means you cannot mount at all. *(Expected to become
+implicit in AdaLab v1.6, ~mid-2026. Until your platform is upgraded, this is mandatory.)*
+
+#### 3. Mount it into the app (App Deployment wizard)
+
+Add one row under **Volume mounts** on the **primary container**:
+
+| Control | Value for this app |
+| --- | --- |
+| **Volume** | the ASV you created (the dropdown shows name + size) |
+| **Mount path** | `lab-data` — the part **after** `/asv-mnt/`. No leading slash, no trailing slash (a trailing slash is rejected outright). |
+| **Read only** | **off** — the app must write |
+| **Fast mount** | **on** — see below |
+
+The mount path must match `DATA_DIR`. Ship both as given and they line up at `/asv-mnt/lab-data`;
+if you change one, change the other (a test checks they agree). Note this is independent of the
+volume's *name* — the name only decides what the directory is called inside a lab.
+
+**Fast Mount is required here, not an optimisation.** ASVs are network filesystems by default;
+SQLite over a network mount is slow and can corrupt under load. Fast Mount attaches the volume
+directly, removing the network hop. Constraints: **one Fast Mount per app** (this app is
+single-container, so it takes it), and it is a property of *this attachment* — the same volume
+can be Fast-Mounted here and network-mounted elsewhere.
+
+After deployment you can change a mount in place from the app's kebab menu → **Edit Mount**.
+
+#### 4. Verify
+
+Start the app. If the volume is wrong you get a startup failure naming the path — that is the
+guard working, not a bug. When it starts, submit one result, redeploy, and check it is still
+there. `Admin → Export → Download database` gives you a backup to keep.
+
+#### Sharing one volume across course apps
+
+One ASV can be mounted into **many apps and labs at once**, which is how a KUID's history stays
+reachable across the course's apps: mount the same volume into each, and each app writes to its
+own subdirectory (named after its slug). Use the **same mount path** in every app —
+different paths for the same data is merely confusing. A volume cannot be mounted twice on the
+*same* container.
+
+#### What not to put here
+
+- **Secrets.** `COURSE_PASSWORD` / `ADMIN_PASSWORD` are environment variables set in the deploy
+  wizard. Anyone with Mount rights on the volume can read its files.
+- **Unbounded growth.** The size is fixed at creation. This app's event log rotates, but
+  uploaded documents and years of results do accumulate — check usage between semesters.
+
+Two files appear in every mounted volume and are not yours: `lost+found/` and `.AVI_SUCCESS`.
+The app filters them everywhere it lists volume contents.
+
+#### Single replica
+
+SQLite in WAL mode is a single-instance embedded database. **Do not scale this app
+horizontally** — two replicas over one volume will corrupt it.
+
+### Deployment order
+
+Deploy in the order **Test → Build → Deploy**. Skipping Build breaks a first-time Deploy. Set
+`COURSE_PASSWORD`, `ADMIN_PASSWORD` and the volume mount in the wizard at deploy time — never
+commit them to `.adalab/`.
+
+### Before you deploy: check the manifests
+
+```bash
+DATA_DIR=$(mktemp -d) python -m pytest tests/test_adalab_config.py -q
+```
+
+`.adalab/` is deployment state, so the test suite validates it: container filenames must match
+their `uid` field, exactly one primary container, `app_url` within the platform's regex and
+length limit, no reserved or secret environment variables, resources inside the caps, and
+`stripped_prefix` consistent with how Streamlit is served. Each of these otherwise fails at
+build or deploy time. `app_id`, `metadata_id` and `current_image_version` ship as `null` and
+are filled in by the deploy flow — **commit them afterwards**, or the next deploy re-derives
+stale state.
+
+Note on the URL prefix: the platform rule is that an app is either prefix-aware with
+`stripped_prefix: false`, or serves at the root with `stripped_prefix: true` — never mixed.
+Streamlit is prefix-aware via `--server.baseUrlPath`, so this app uses the former.
+
+```yaml
+asset: app
+owner: {{ contact_email }}
+version: 0.1.0
+use: https://<your-adalab-host>/apps/{{ project_slug }}/
+source: <repo URL>
+data: $DATA_DIR/{{ project_slug }}/results.sqlite (mirror: results.csv, exports in-app)
+```

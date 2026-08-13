@@ -1,0 +1,76 @@
+# {{ exercise_title }} — agent guide
+
+**This app has two zones. Edit only one of them.**
+
+- **The seam** (`exercise/**`) — the only per-app code. Python only; it *may* use streamlit.
+- **The chassis** (`core/`, `pages/`, `app.py`, deploy config) — identical in every app in
+  this family. Do NOT edit it per app.
+
+The app is a single-process **Streamlit** application:
+
+```
+core/       framework-free Python. Imports streamlit NOWHERE.
+            identity, storage, cohorts, results, export, admin, plot helpers.
+pages/      thin Streamlit UI — chassis pages only.
+exercise/   THE SEAM: schema.py, capture.py, analysis.py, content.md.
+app.py      entry point, course gate, navigation.
+```
+
+**`core/` must never import streamlit.** That is what keeps the UI swappable and makes
+`core/` reusable as a shared library later; `tests/test_core_no_streamlit.py` enforces it and
+will fail the build on a stray import. `exercise/schema.py` is imported by `core/`, so it must
+stay framework-free too.
+
+## Protected zone (do not edit — the hook blocks these)
+
+- `core/**`
+- `pages/**`
+- `app.py`
+- `assets/**`
+- `.adalab/app.json`
+- `.adalab/project.json`
+- `.adalab/card.json`
+- `.vscode/**`
+- `Containerfile`
+- `uv.lock`
+- `poetry.lock`
+- `requirements.txt`
+- `.claude/settings.json`
+- `.claude/hooks/**`
+
+## Editable with confirmation
+
+`.adalab/local_container_demo.json`, `pyproject.toml`, `.streamlit/config.toml`, and
+dependency-add commands (`pip/uv/poetry install|add`).
+
+The always-writable zone is the seam: `exercise/**`.
+
+## You want to… → edit
+
+- Add / change a measurement field → `exercise/schema.py` (storage, CSV and export columns follow)
+- Change the input UI → `exercise/capture.py` (returns a payload dict; the chassis validates it)
+- Add or change a plot → `exercise/analysis.py`, built with `core.plots` helpers
+- Change instructions or the analysis questions → `exercise/content.md`
+  (questions are the list items under `## Analysis questions`)
+
+## How the pieces fit (so you don't reinvent them)
+
+- **Plots must come from `core.plots`**, which returns `(figure, code_str)`. The chassis shows
+  `code_str` in a "Show the code" panel — plain pandas + plotly that runs in a notebook against
+  an exported CSV. Never hand-build a plotly figure in the seam, or students lose that panel.
+- **Identity** is KUID → group → hold → year (§B2). Never add per-student passwords; the
+  course password is the gate.
+- **Persistence is append-only**: corrections *supersede*, "reset" *closes a year*, nothing is
+  deleted. SQLite is the system of record with a long-format CSV mirror; both live on the
+  mounted AdaLab Shared Volume at `$DATA_DIR`. The app **fails loud** if that volume is
+  missing — never point `DATA_DIR` at a container-local path to "fix" a startup error.
+- **Comparison views are anonymised** (no KUID or group labels) by design.
+- **`.adalab/` is deployment state**, validated by `tests/test_adalab_config.py`: container
+  filenames must match their `uid`, exactly one primary container, no reserved or secret env
+  vars, and `stripped_prefix` must stay consistent with Streamlit's `--server.baseUrlPath`.
+  See `.claude/skills/lab-exercise-app/references/adalab-deployment.md`.
+
+## Conventions
+
+Style and composition rules are in `.claude/rules/`. Use the **`lab-exercise-app`** skill for
+any request to adapt this app, and `/new-exercise-field` to add a measurement field.

@@ -1,0 +1,17 @@
+# data & artifacts
+/lab-data/
+/data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/

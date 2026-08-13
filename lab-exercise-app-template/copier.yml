@@ -1,0 +1,126 @@
+# Copier configuration for the lab-exercise-app template.
+# Part of the adamatics/app_coding_templates monorepo. Copier has no monorepo-subdir flag,
+# so stamp by pointing it at this subdirectory of a clone:
+#   git clone git@github.com:adamatics/app_coding_templates.git
+#   copier copy app_coding_templates/lab-exercise-app-template <output-path> --trust
+# The template contents live under template/ (see _subdirectory) and stamp directly into
+# <output-path>. Keep this question list SHORT (spec §4): there are deliberately NO colour
+# or logo questions — the CPDSE visual identity (spec §13) is fixed in the chassis so that
+# apps in the family cannot drift. (This template's branding is fixed, unlike the monorepo's
+# per-prospect templates; see SPEC.md.)
+
+_subdirectory: template
+_templates_suffix: .jinja
+_envops:
+  keep_trailing_newline: true
+
+# A `copier update` must never clobber local identity/config edits (Addendum §A4).
+# Paths are relative to the destination root.
+_skip_if_exists:
+  - "core/theme.py"
+  - "assets/*"
+  - ".streamlit/config.toml"
+  - ".copier-answers.yml"
+
+# Post-generation tasks (require --trust): make the hooks executable and turn the stamped
+# app into its own git repo (Addendum §A4). Tolerant of environments without git.
+_tasks:
+  - "chmod +x .claude/hooks/chassis_guard.py .claude/hooks/format.py .claude/hooks/session_start.py || true"
+  # .adalab/project.json records the AdaLab user who owns the app-builder project. Copier has
+  # no env filter, so fill it from $LOGNAME here when the answer was left blank.
+  - >-
+    python3 -c "import json,os,pathlib;
+    p=pathlib.Path('.adalab/project.json');
+    d=json.loads(p.read_text());
+    d['author']=d.get('author') or os.environ.get('LOGNAME') or os.environ.get('USER') or '';
+    p.write_text(json.dumps(d, indent=4)+chr(10))" || true
+  - "git init -b main >/dev/null 2>&1 || true"
+
+_message_after_copy: |
+  Your lab-exercise app "{{ project_name }}" has been created.
+
+  Next steps:
+    1. Read README.md (app usage) and .claude/CLAUDE.md (chassis/seam split).
+    2. Customise the exercise by editing ONLY the seam:
+         exercise/schema.py   exercise/capture.py   exercise/analysis.py   exercise/content.md
+    3. Build & run (a writable volume MUST be mounted at /asv-mnt/lab-data):
+         podman build -t {{ project_slug }} .        # or: docker build -f Containerfile -t {{ project_slug }} .
+         podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data \
+           -e COURSE_PASSWORD=lab2026 -e ADMIN_PASSWORD=change-me {{ project_slug }}
+       then open http://localhost:8000/{{ project_slug }}/
+
+# ---------------------------------------------------------------------------
+# Questions
+# ---------------------------------------------------------------------------
+
+project_name:
+  type: str
+  help: Human-readable app name (e.g. "Absorbance Lab 101")
+  default: Absorbance Lab
+
+project_slug:
+  type: str
+  help: >-
+    Directory / image name AND the AdaLab app URL (served at /apps/<slug>/).
+    Lowercase letters, digits and hyphens; must start and end alphanumeric; max 63 chars.
+    Must be globally unique on the AdaLab tenant — check availability before deploying.
+  default: "{{ project_name | lower | trim | replace(' ', '-') | replace('_', '-') | replace('.', '-') }}"
+  # Mirrors AdaLab's app_url rule: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ , max 63 chars.
+  # A slug that fails this is rejected at deploy time, long after stamping — catch it here.
+  validator: >-
+    {% if not project_slug %}
+    project_slug must not be empty.
+    {% elif project_slug | length > 63 %}
+    project_slug must be 63 characters or fewer (AdaLab app_url limit).
+    {% elif project_slug != project_slug | lower %}
+    project_slug must be lowercase.
+    {% elif not project_slug[0].isalnum() or not project_slug[-1].isalnum() %}
+    project_slug must start and end with a letter or digit (no leading/trailing hyphen).
+    {% elif not (project_slug | replace('-', '')).isalnum() %}
+    project_slug may contain only lowercase letters, digits and hyphens.
+    {% endif %}
+
+exercise_title:
+  type: str
+  help: The exercise title shown in the app header and on the Gallery card
+  default: Spectrophotometric Absorbance Measurement
+
+course_code:
+  type: str
+  help: Course code (e.g. FARM-2026, KEM101). Used on the card and in keywords.
+  default: PHARMA-101
+
+app_description:
+  type: str
+  help: One-line description (used in the .adalab manifests and the Gallery card)
+  default: "{{ exercise_title }} — a CPDSE student lab-exercise app ({{ course_code }})."
+
+adalab_author:
+  type: str
+  help: >-
+    AdaLab user ID (LOGNAME) that owns the app-builder project — written to
+    .adalab/project.json. Leave blank to fill it from $LOGNAME after generation.
+  default: ""
+
+host_institution:
+  type: str
+  help: Affiliation shown in the footer only (does not change branding)
+  choices:
+    - SDU
+    - UCPH
+    - CPDSE
+  default: CPDSE
+
+contact_email:
+  type: str
+  help: Owner / contact email (appears in README agent block and card)
+  default: teaching@cpdse.dk
+  validator: >-
+    {% if '@' not in contact_email or '.' not in contact_email %}
+    contact_email must be a valid email address.
+    {% endif %}
+
+default_cohort_label:
+  type: str
+  help: Label for the first (open) cohort, e.g. 2026-fall
+  default: 2026-fall
