@@ -261,6 +261,53 @@ this template depends on — the plugin is internal and is not reproduced here.
   a "take everything" button. The backup uses SQLite's backup API, not a file copy, because a
   raw copy under WAL can miss committed transactions.
 
+## Guardrail relaxation (2026-09-01, supersedes §A4/§B9 on scope)
+
+The three-layer guardrail worked exactly as specified and that turned out to be the problem:
+freezing the whole chassis behind a PreToolUse hook inhibited the people *maintaining* these
+apps far more than it protected the family. A CPDSE developer working in a stamped app with an
+agent could not fix a bug in `core/`, adjust a chassis screen, or add a dependency without
+fighting the guard. Decision: keep the guard, shrink it to what is genuinely expensive to get
+wrong, and move the architectural invariants onto the test suite where they belong.
+
+- **Blocked set is now three files:** `.adalab/app.json`, `.adalab/project.json`,
+  `.adalab/card.json`. These are written by the AdaLab extension and carry `app_id`,
+  `metadata_id` and `current_image_version`, filled in at deploy time; hand-editing them is the
+  documented cause of duplicate-container deploys and stale app state. Rationale for keeping
+  *these* and not the rest: they are the only files where an agent edit is both plausible and
+  silently destructive at deploy time rather than at test time.
+- **`.adalab/local_container_1.json` stays at the `permissions.ask` tier**, not blocked. It
+  holds env vars, CPU/RAM and volume mounts — things a developer legitimately sets on the way
+  to a deploy. Blocking it would have reintroduced the friction this change exists to remove.
+- **The Bash denylist keeps only the student-data rule** (`rm` touching `/asv-mnt` or a
+  `.sqlite` file) plus recursive deletion of `.adalab/`. Results are append-only by design and
+  have no undo, so this one is about data, not about code ownership. The old `backend|frontend`
+  patterns were dead — they predate the Streamlit rewrite — and the `rm Containerfile` and
+  guard-tampering rules went with the rest.
+- **`core/**`, `ui/**`, `app.py`, `assets/**`, `Containerfile`, lockfiles, `pyproject.toml`,
+  `.streamlit/config.toml`, `.vscode/**` and `.claude/**` are all editable now.**
+- **Enforcement moved to tests.** `test_core_no_streamlit.py`, `test_navigation.py`,
+  `test_show_the_code.py`, `test_concurrency.py` and `test_adalab_config.py` already encoded
+  every invariant that actually matters; they now carry the load alone. The advisory layer was
+  rewritten to say so — "edit only the seam" became "start at the seam, here is what breaks if
+  you go further, and here is the test that catches it". That rewrite was the bulk of the work:
+  six files told the agent the chassis was off-limits, and leaving any of them would have kept
+  agents refusing chassis edits regardless of what the hook permitted.
+- **`chassis_guard.py` renamed to `deploy_guard.py`**, and `ALLOW_CHASSIS_EDIT` to
+  `ALLOW_DEPLOY_CONFIG_EDIT`. The old name described a job the hook no longer does.
+- **New `tests/test_guardrails.py`** asserts the hook's `PROTECTED` list and
+  `settings.json`'s `permissions.deny` still name the same files, that the freed paths are
+  genuinely free, and that the two Bash rules still fire. There was no such test before, which
+  is how SPEC.md drifted to listing `pages/**` as protected long after the directory was
+  renamed to `ui/`; it also stops the relaxation being quietly re-tightened.
+
+**Accepted risk, recorded deliberately.** `.claude/settings.json` and `.claude/hooks/**` are no
+longer protected, so an agent can disable the guard in a single edit. That was the maintainer's
+call: developers own the repo they stamped, and a guard they cannot remove is a guard that will
+be worked around. The `.adalab` block is therefore a speed bump against accident, not a defence
+against intent — which is the right strength for the actual failure mode (an agent
+"helpfully" editing deploy state it does not understand).
+
 ## Addendum A — reconciled against the ACTUAL text (was missing, later provided)
 
 The addendum file was initially absent, so I first reconciled against the change table the
@@ -339,7 +386,7 @@ from `window.location.pathname`), with Vite `base: './'`; AdaLab (`stripped_pref
 strips the `/apps/<slug>/` prefix so the backend serves at root. See the top section. The
 earlier backend `<base href>`/`window.__BASE_PATH__` injection was removed.
 
-## Chassis guard
+## Chassis guard  *(SUPERSEDED by "Guardrail relaxation" above; also predates the Streamlit rewrite)*
 
 - **Guard uses a concrete chassis DENY list** covering all chassis code + config
   (`backend/**`, `frontend/src/**` except nothing — the whole `src` tree is chassis except it

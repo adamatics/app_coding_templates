@@ -2,7 +2,7 @@
 description: Add a measurement field to the exercise (schema + capture form; storage and exports follow)
 ---
 
-Add a new field to this exercise. **Two files, both in the seam** — never the chassis.
+Add a new field to this exercise. **Two files, both in the seam** — the chassis follows.
 
 Do this:
 
@@ -27,8 +27,10 @@ Do this:
    - the chart candidates (if numeric) — add a `core.plots` call in `exercise/analysis.py`
      if they want it plotted, which also gives it a "Show the code" panel.
 
-Do **not** edit `core/`, `ui/`, `app.py`, the Containerfile or the `.adalab/` config — they
-are chassis and the guard blocks them. If you find yourself wanting to, re-read
-`.claude/skills/lab-exercise-app/references/chassis-vs-seam.md`.
+Adding a field needs **no** chassis change: storage, the results table, the CSV mirror and all
+four exports derive their columns from the schema. If you find yourself about to edit `core/`,
+`ui/` or `app.py` for this, you have almost certainly missed a derivation — re-read
+`.claude/skills/lab-exercise-app/references/chassis-vs-seam.md` first. (Those files are
+editable; they are just not what a new field calls for.)
 
 $ARGUMENTS

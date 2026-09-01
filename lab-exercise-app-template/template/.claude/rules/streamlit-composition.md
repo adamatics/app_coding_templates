@@ -11,6 +11,10 @@ Exercise pages **compose chassis components from `core/` and `ui/_components.py`
 than styling from scratch**, so the CPDSE identity holds across every app in the family
 (Addendum B §B9).
 
+These are composition rules, not access rules: `core/` and `ui/` are editable. But an exercise
+page that reaches around the shared components instead of extending them is how the family
+drifts apart — if a component is missing something, add it there rather than restyling locally.
+
 ## Do
 
 - Build plots with **`core.plots`** helpers (`scatter`, `line`, `histogram`, `box`, `bar`).
@@ -30,7 +34,8 @@ than styling from scratch**, so the CPDSE identity holds across every app in the
   convey state with words and weight (spec §13).
 - Don't hard-code hex colours anywhere outside `core/theme.py`.
 - Don't import streamlit from `core/**` or from `exercise/schema.py` (`core` imports the
-  schema; a stray import breaks the framework-free guarantee and its test).
+  schema; a stray import breaks the framework-free guarantee and fails
+  `tests/test_core_no_streamlit.py`). This holds however you edit `core/`.
 - Don't write to the database directly from a page; go through `core.results`,
   `core.identity`, `core.admin` so the append-only and cohort rules always apply.
 - Don't build your own export; `core.export` produces all four formats (CSV, Excel, PDF, HTML).
