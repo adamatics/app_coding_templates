@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""session_start — SessionStart hook announcing the guardrails (Addendum A §A4).
+"""session_start — SessionStart hook orienting the agent in the app.
 
-Prints a short notice (added to the session context) so the agent knows, up front, that the
-chassis is protected and the exercise seam is the place to work.
+Prints a short notice (added to the session context) so the agent knows where to start, what
+is actually enforced, and what the one blocked zone is.
 """
 import sys
 
 
 def main() -> None:
     sys.stdout.write(
-        "🛡️  Guardrails are active for this lab-exercise app (Streamlit).\n"
-        "Chassis/seam split: core/ (framework-free — imports streamlit NOWHERE), ui/ and\n"
-        "app.py are CHASSIS and protected by a PreToolUse hook. To change the exercise, edit\n"
-        "ONLY the seam:\n"
+        "🧪 Lab-exercise app (Streamlit). Start at the seam:\n"
         "  exercise/schema.py  exercise/capture.py  exercise/analysis.py  exercise/content.md\n"
-        "Storage, CSV/exports and the anonymised comparison follow from the schema; build\n"
-        "plots with core.plots so each gets its 'Show the code' panel.\n"
+        "Storage, CSV/exports and the anonymised comparison all follow from the schema; build\n"
+        "plots with core.plots so each keeps its 'Show the code' panel.\n"
+        "core/, ui/, app.py and assets/ are EDITABLE. The invariants that matter are enforced\n"
+        "by the test suite, not by a hook — core/ imports streamlit nowhere, and ui/ is never\n"
+        "renamed pages/. After a chassis change run:\n"
+        "  DATA_DIR=$(mktemp -d) python -m pytest -q\n"
+        "Blocked: .adalab/{app,project,card}.json (deployment state) and commands that would\n"
+        "delete the volume or the database.\n"
         "See .claude/CLAUDE.md and the lab-exercise-app skill. Run /new-exercise-field to add\n"
         "a measurement field.\n"
     )

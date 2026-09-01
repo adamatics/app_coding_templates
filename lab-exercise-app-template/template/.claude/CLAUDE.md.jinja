@@ -1,56 +1,65 @@
 # {{ exercise_title }} — agent guide
 
-**This app has two zones. Edit only one of them.**
+**Start at the seam. The rest of the app is yours to change when the seam isn't enough.**
 
-- **The seam** (`exercise/**`) — the only per-app code. Python only; it *may* use streamlit.
-- **The chassis** (`core/`, `ui/`, `app.py`, deploy config) — identical in every app in
-  this family. Do NOT edit it per app.
+- **The seam** (`exercise/**`) — the per-app code: what students enter, what they see
+  afterwards, what the instructions say. Most requests are satisfied here alone, and changes
+  here keep this app compatible with every other app in the family.
+- **The chassis** (`core/`, `ui/`, `app.py`, `assets/`) — shared machinery. **Editable.** It is
+  identical across the family by default, so change it deliberately and run the tests.
+- **Deployment state** (`.adalab/app.json`, `project.json`, `card.json`) — the one blocked
+  zone. Written by the AdaLab extension, not by hand.
 
 The app is a single-process **Streamlit** application:
 
 ```
 core/       framework-free Python. Imports streamlit NOWHERE.
             identity, storage, cohorts, results, export, admin, plot helpers.
-ui/         thin Streamlit UI — chassis screens only.
+ui/         thin Streamlit UI — chassis screens.
 exercise/   THE SEAM: schema.py, capture.py, analysis.py, content.md.
 app.py      entry point, course gate, onboarding, navigation.
 ```
 
-**Never rename `ui/` to `pages/`.** It looks like the Streamlit convention and it is a trap:
-Streamlit switches into magic multipage mode from the directory *name* alone
-(`Path(main_script_parent / "pages").exists()`). Every module in it then becomes a page with
-its own URL and its own sidebar entry — including `login`, `session_url` and `_components`,
-which are machinery, not screens, and which would bypass the course gate in `app.py`. This
-shipped once and confused students; `tests/test_navigation.py` now fails if `pages/` reappears.
+## Invariants — enforced by tests, not by a hook
 
-**`core/` must never import streamlit.** That is what keeps the UI swappable and makes
-`core/` reusable as a shared library later; `tests/test_core_no_streamlit.py` enforces it and
-will fail the build on a stray import. `exercise/schema.py` is imported by `core/`, so it must
-stay framework-free too.
+Editing the chassis is allowed; breaking these is not. Each has a test that fails.
 
-## Protected zone (do not edit — the hook blocks these)
+- **`core/` must never import streamlit.** That is what keeps the UI swappable and makes
+  `core/` reusable as a shared library later. `exercise/schema.py` is imported by `core/`, so
+  it must stay framework-free too. → `tests/test_core_no_streamlit.py`
+- **Never rename `ui/` to `pages/`.** It looks like the Streamlit convention and it is a trap:
+  Streamlit switches into magic multipage mode from the directory *name* alone
+  (`Path(main_script_parent / "pages").exists()`). Every module in it then becomes a page with
+  its own URL and its own sidebar entry — including `login`, `session_url` and `_components`,
+  which are machinery, not screens, and which would bypass the course gate in `app.py`. This
+  shipped once and confused students. → `tests/test_navigation.py`
+- **Plots come from `core.plots`**, which returns `(figure, code_str)` so the chassis can show
+  the standalone pandas + plotly in a "Show the code" panel. → `tests/test_show_the_code.py`
+- **No per-student data in module-level globals** — Streamlit state is per-session and a
+  module global leaks across them. → `tests/test_concurrency.py`
+- **`.adalab/` integrity**: container filenames match their `uid`, exactly one primary
+  container, no reserved or secret env vars, `stripped_prefix` consistent with Streamlit's
+  `--server.baseUrlPath`. → `tests/test_adalab_config.py`
 
-- `core/**`
-- `ui/**`
-- `app.py`
-- `assets/**`
-- `.adalab/app.json`
-- `.adalab/project.json`
-- `.adalab/card.json`
-- `.vscode/**`
-- `Containerfile`
-- `uv.lock`
-- `poetry.lock`
-- `requirements.txt`
-- `.claude/settings.json`
-- `.claude/hooks/**`
+After any chassis change, run the suite:
+
+```
+DATA_DIR=$(mktemp -d) python -m pytest -q
+```
+
+## Blocked (the hook exits 2)
+
+- `.adalab/app.json`, `.adalab/project.json`, `.adalab/card.json` — deployment state; the
+  AdaLab extension owns these and fills in `app_id`, `metadata_id` and
+  `current_image_version` at deploy time.
+- Commands that would delete the mounted volume, the SQLite database, or `.adalab/`. Student
+  results are append-only and have no undo.
 
 ## Editable with confirmation
 
-`.adalab/local_container_1.json`, `pyproject.toml`, `.streamlit/config.toml`, and
-dependency-add commands (`pip/uv/poetry install|add`).
-
-The always-writable zone is the seam: `exercise/**`.
+`.adalab/local_container_1.json` (env vars, CPU/RAM, volume mounts) and dependency-add
+commands (`pip/uv/poetry install|add`) — a package installed without also landing in
+`pyproject.toml` builds locally and then breaks the container.
 
 ## You want to… → edit
 
@@ -59,23 +68,25 @@ The always-writable zone is the seam: `exercise/**`.
 - Add or change a plot → `exercise/analysis.py`, built with `core.plots` helpers
 - Change instructions or the analysis questions → `exercise/content.md`
   (questions are the list items under `## Analysis questions`)
+- Change identity, cohorts, storage, exports or the chassis screens → `core/**` and `ui/**`.
+  Allowed, but it moves this app away from the family — prefer the seam where it will do, and
+  consider whether the change belongs in the template so every app gets it.
 
 ## How the pieces fit (so you don't reinvent them)
 
-- **Plots must come from `core.plots`**, which returns `(figure, code_str)`. The chassis shows
-  `code_str` in a "Show the code" panel — plain pandas + plotly that runs in a notebook against
-  an exported CSV. Never hand-build a plotly figure in the seam, or students lose that panel.
+- **Plots** from `core.plots` come with their reproduction code; the chassis renders it in a
+  "Show the code" panel. Hand-building a plotly figure in the seam silently loses that panel,
+  which is a teaching requirement (§B7).
 - **Identity** is KUID → group → hold → year (§B2). Never add per-student passwords; the
   course password is the gate.
 - **Persistence is append-only**: corrections *supersede*, "reset" *closes a year*, nothing is
   deleted. SQLite is the system of record with a long-format CSV mirror; both live on the
   mounted AdaLab Shared Volume at `$DATA_DIR`. The app **fails loud** if that volume is
-  missing — never point `DATA_DIR` at a container-local path to "fix" a startup error.
+  missing — never point `DATA_DIR` at a container-local path to "fix" a startup error
+  (`STORAGE_MODE=local` is the supported, loudly-flagged alternative).
 - **Comparison views are anonymised** (no KUID or group labels) by design.
-- **`.adalab/` is deployment state**, validated by `tests/test_adalab_config.py`: container
-  filenames must match their `uid`, exactly one primary container, no reserved or secret env
-  vars, and `stripped_prefix` must stay consistent with Streamlit's `--server.baseUrlPath`.
-  See `.claude/skills/lab-exercise-app/references/adalab-deployment.md`.
+- **Exports** are produced by `core.export` in all four formats (CSV, Excel, PDF, HTML). Extend
+  it rather than building a parallel one.
 
 ## Conventions
 

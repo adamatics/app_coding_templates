@@ -25,7 +25,7 @@ _skip_if_exists:
 # Post-generation tasks (require --trust): make the hooks executable and turn the stamped
 # app into its own git repo (Addendum §A4). Tolerant of environments without git.
 _tasks:
-  - "chmod +x .claude/hooks/chassis_guard.py .claude/hooks/format.py .claude/hooks/session_start.py || true"
+  - "chmod +x .claude/hooks/deploy_guard.py .claude/hooks/format.py .claude/hooks/session_start.py || true"
   # .adalab/project.json records the AdaLab user who owns the app-builder project. Copier has
   # no env filter, so fill it from $LOGNAME here when the answer was left blank.
   - >-

@@ -17,7 +17,7 @@ identically (the *chassis*) and differ only in the exercise-specific parts (the 
 
   ```
   core/       framework-free Python — imports streamlit NOWHERE (enforced by a test)
-  pages/      thin Streamlit chassis UI
+  ui/         thin Streamlit chassis UI
   exercise/   THE SEAM — schema.py, capture.py, analysis.py, content.md
   app.py      entry point, course gate, navigation
   ```
@@ -36,8 +36,9 @@ identically (the *chassis*) and differ only in the exercise-specific parts (the 
 - **Event log** of registrations, submissions, corrections, exports and errors — to the
   database, stdout and a durable file on the volume.
 - **Course documents**: the teacher uploads the øvelsesvejledning; students download it in-app.
-- **Agent guidance** (`CLAUDE.md`, a `lab-exercise-app` skill, `/new-exercise-field`) and a
-  **three-layer guardrail** whose hook actually blocks edits outside the seam.
+- **Agent guidance** (`CLAUDE.md`, a `lab-exercise-app` skill, `/new-exercise-field`) that
+  points agents at the seam first, backed by a **narrow guard** on AdaLab deployment state
+  and student data — the app's own code is left editable.
 
 ## Requirements
 
@@ -199,7 +200,7 @@ via the Admin page (or drop the SQLite file into the volume's `<app-slug>/` subd
 
 ## Customising the exercise (the seam)
 
-Inside a stamped app you edit **only these four files**:
+Inside a stamped app, almost every change lands in **these four files**:
 
 ```
 exercise/schema.py     the Measurement model — drives storage, CSV and all exports
@@ -208,25 +209,46 @@ exercise/analysis.py   the plots, built with core.plots (each gets "Show the cod
 exercise/content.md    instructions + the analysis questions
 ```
 
-You never touch the chassis; a `chassis_guard` hook enforces it.
+Most exercises need nothing else. The chassis (`core/`, `ui/`, `app.py`, `assets/`) **is
+editable** when the seam genuinely isn't enough — it used to be blocked by a hook, and that
+turned out to inhibit the people maintaining these apps more than it protected them. What
+holds the family together now is the test suite, not a permission wall:
 
-### Template-maintainer escape hatch
+| Invariant | Test that fails |
+| --- | --- |
+| `core/` imports streamlit nowhere | `tests/test_core_no_streamlit.py` |
+| The UI package is `ui/`, never `pages/` | `tests/test_navigation.py` |
+| Plots keep their standalone "Show the code" | `tests/test_show_the_code.py` |
+| No per-student data in module-level globals | `tests/test_concurrency.py` |
+| `.adalab/` stays internally consistent | `tests/test_adalab_config.py` |
 
-If **you** are editing the template's chassis (this repo), set `ALLOW_CHASSIS_EDIT=1` to
-disable the guard. Documented only here, not in the stamped app.
+### What is still guarded
+
+`deploy_guard.py` (a PreToolUse hook) blocks two things and nothing else:
+
+- **`.adalab/app.json`, `project.json`, `card.json`** — deployment state the AdaLab extension
+  writes and fills in at deploy time. `.adalab/local_container_1.json` is *not* blocked; it
+  holds env vars, resources and volume mounts, and sits at the confirm-first tier.
+- **Commands that would delete the mounted volume, the SQLite database, or `.adalab/`** —
+  student results are append-only and have no undo.
+
+`ALLOW_DEPLOY_CONFIG_EDIT=1` lifts even that, for template maintainers working in this repo.
 
 ## Testing a stamped app
 
 ```bash
-DATA_DIR=$(mktemp -d) python -m pytest -q      # 138 tests
+DATA_DIR=$(mktemp -d) python -m pytest -q      # 280 tests
 ```
 
-The suite includes the three load-bearing checks — `core/` imports with **no streamlit
-installed**, every plot's "Show the code" **runs standalone** against an exported CSV, and
-**60 simultaneous sessions** submit without error or cross-session leakage — plus a
-`.adalab/` integrity suite that catches the deployment mistakes which otherwise only surface
-at build or deploy time (container filename ≠ `uid`, two primary containers, a committed
-secret, a `stripped_prefix`/`baseUrlPath` mismatch, resources outside the platform caps).
+The suite is the guardrail, so it matters more than the count. It includes the three
+load-bearing checks — `core/` imports with **no streamlit installed**, every plot's "Show the
+code" **runs standalone** against an exported CSV, and **60 simultaneous sessions** submit
+without error or cross-session leakage — plus a `.adalab/` integrity suite that catches the
+deployment mistakes which otherwise only surface at build or deploy time (container filename ≠
+`uid`, two primary containers, a committed secret, a `stripped_prefix`/`baseUrlPath` mismatch,
+resources outside the platform caps), and `test_guardrails.py`, which pins the guard's scope in
+both directions: the three `.adalab` files stay blocked, and `core/`, `ui/`, `app.py` and the
+seam stay editable.
 
 ## Repository layout
 
@@ -243,8 +265,9 @@ lab-exercise-app-template/
 
 ## Design principles
 
-1. **Chassis vs. seam**, enforced not just documented. The seam is Python only, so CPDSE
-   scientists working with coding agents can own it for years.
+1. **Chassis vs. seam**, a convention held by tests rather than a permission wall. The seam
+   is Python only, so CPDSE scientists working with coding agents can own it for years — and
+   the chassis stays editable, because the same people have to maintain that too.
 2. **`core/` is framework-free** — the seed of the shared library later apps will depend on.
 3. **Data durability**: append-only, close-never-delete, fail-loud storage, stable export
    columns across years.

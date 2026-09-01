@@ -10,22 +10,32 @@ description: >
 
 # Adapting a lab-exercise app
 
-This app is one of a family stamped from a Copier template. Every app shares an identical
-**chassis** and differs only in the **exercise seam**. Your job is almost always to edit the
-seam and let the chassis follow.
+This app is one of a family stamped from a Copier template. Every app shares the same
+**chassis** and differs in the **exercise seam**. Your job is almost always to edit the seam
+and let the chassis follow.
 
-## The one rule
+## Start at the seam
 
-**Edit only `exercise/**`:**
+**`exercise/**` — the per-app code:**
 
 - `exercise/schema.py` — the `Measurement` model (framework-free; `core/` imports it)
 - `exercise/capture.py` — the Streamlit input UI for this exercise
 - `exercise/analysis.py` — the exercise's plots, built with `core.plots`
 - `exercise/content.md` — instructions and the `## Analysis questions` list
 
-Everything else is chassis, protected by a hook and by `permissions.deny`. Storage, CSV/export
-columns, identity, the course gate, cohorts, anonymised comparison and the four export formats
-are all derived or provided — you do not rebuild them.
+Storage, CSV/export columns, identity, the course gate, cohorts, anonymised comparison and the
+four export formats are all derived from these or provided — you do not rebuild them.
+
+## The chassis is editable
+
+`core/`, `ui/`, `app.py` and `assets/` **can** be changed when the seam genuinely isn't enough.
+They are shared across the family, so change them deliberately: keep the invariants listed in
+`.claude/CLAUDE.md` (they have tests), and run `DATA_DIR=$(mktemp -d) python -m pytest -q`
+afterwards. If the change would benefit every app in the family, it belongs in the template
+rather than in this one app.
+
+Only `.adalab/app.json`, `.adalab/project.json` and `.adalab/card.json` are blocked — AdaLab
+deployment state, written by the extension rather than by hand.
 
 ## Workflow: "add / change a field"
 

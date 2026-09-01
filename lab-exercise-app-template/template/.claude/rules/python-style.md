@@ -10,8 +10,9 @@ paths:
 - Formatting is **ruff** (a PostToolUse hook runs `ruff format` automatically).
 - Prefer plain, explicit code over cleverness — scientists and teachers read and maintain this.
 - Keep dependencies minimal (§B8: streamlit, pandas, plotly, lmfit, SQLite, a headless PDF
-  lib). Adding a runtime dependency touches `pyproject.toml` (an "ask" file) and must also
-  work in the container build.
+  lib). Adding a runtime dependency means editing `pyproject.toml` **and** confirming it
+  builds in the container — an install command alone works locally and then breaks the image,
+  which is why `pip/uv/poetry install|add` prompts for confirmation.
 
 ## The architectural rule that outranks style
 

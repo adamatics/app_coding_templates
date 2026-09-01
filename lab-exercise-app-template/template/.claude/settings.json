@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/chassis_guard.py\""
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/deploy_guard.py\""
           }
         ]
       }
@@ -35,18 +35,6 @@
   },
   "permissions": {
     "deny": [
-      "Edit(core/**)",
-      "Write(core/**)",
-      "MultiEdit(core/**)",
-      "Edit(ui/**)",
-      "Write(ui/**)",
-      "MultiEdit(ui/**)",
-      "Edit(app.py)",
-      "Write(app.py)",
-      "MultiEdit(app.py)",
-      "Edit(assets/**)",
-      "Write(assets/**)",
-      "MultiEdit(assets/**)",
       "Edit(.adalab/app.json)",
       "Write(.adalab/app.json)",
       "MultiEdit(.adalab/app.json)",
@@ -55,39 +43,12 @@
       "MultiEdit(.adalab/project.json)",
       "Edit(.adalab/card.json)",
       "Write(.adalab/card.json)",
-      "MultiEdit(.adalab/card.json)",
-      "Edit(.vscode/**)",
-      "Write(.vscode/**)",
-      "MultiEdit(.vscode/**)",
-      "Edit(Containerfile)",
-      "Write(Containerfile)",
-      "MultiEdit(Containerfile)",
-      "Edit(uv.lock)",
-      "Write(uv.lock)",
-      "MultiEdit(uv.lock)",
-      "Edit(poetry.lock)",
-      "Write(poetry.lock)",
-      "MultiEdit(poetry.lock)",
-      "Edit(requirements.txt)",
-      "Write(requirements.txt)",
-      "MultiEdit(requirements.txt)",
-      "Edit(.claude/settings.json)",
-      "Write(.claude/settings.json)",
-      "MultiEdit(.claude/settings.json)",
-      "Edit(.claude/hooks/**)",
-      "Write(.claude/hooks/**)",
-      "MultiEdit(.claude/hooks/**)"
+      "MultiEdit(.adalab/card.json)"
     ],
     "ask": [
       "Edit(.adalab/local_container_1.json)",
       "Write(.adalab/local_container_1.json)",
       "MultiEdit(.adalab/local_container_1.json)",
-      "Edit(pyproject.toml)",
-      "Write(pyproject.toml)",
-      "MultiEdit(pyproject.toml)",
-      "Edit(.streamlit/config.toml)",
-      "Write(.streamlit/config.toml)",
-      "MultiEdit(.streamlit/config.toml)",
       "Bash(pip install:*)",
       "Bash(uv add:*)",
       "Bash(uv pip install:*)",

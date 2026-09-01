@@ -23,7 +23,7 @@ No Node, no separate API, no database server, no Alembic.
 
 ```
 core/       framework-free Python — imports streamlit NOWHERE (a test enforces it)
-pages/      thin Streamlit chassis UI
+ui/         thin Streamlit chassis UI (never named pages/ — a test enforces it)
 exercise/   THE SEAM — schema.py, capture.py, analysis.py, content.md
 assets/     brand artwork (CPDSE logo)
 app.py      entry point, course gate, navigation
@@ -80,13 +80,22 @@ admin actions and errors to three sinks: the `event` table (Admin → Log), stdo
 `events.jsonl` on the volume. Logging can never break the app. stdout is pseudonymous unless
 `LOG_PII=true`.
 
-## Protected zones (three-layer guardrail, §B9)
+## Protected zones (narrow; diverges from §B9 — see DECISIONS.md)
 
-`core/**`, `pages/**`, `app.py`, `assets/**`, `.adalab/{app,project,card}.json`, `.vscode/**`,
-`Containerfile`, lockfiles, `.claude/settings.json`, `.claude/hooks/**` — named identically in
-`permissions.deny`, the hook's `PROTECTED` list, and `CLAUDE.md`. **Ask** tier:
-`.adalab/local_container_demo.json`, `pyproject.toml`, `.streamlit/config.toml`, dependency
-commands. Only `exercise/**` is always writable.
+**Blocked:** `.adalab/app.json`, `.adalab/project.json`, `.adalab/card.json` — named
+identically in `permissions.deny`, the hook's `PROTECTED` list and `CLAUDE.md`, with
+`tests/test_guardrails.py` failing if the three drift apart. The hook also refuses Bash
+commands that would delete the mounted volume, the SQLite database or `.adalab/`.
+
+**Ask tier:** `.adalab/local_container_1.json` and dependency-add commands.
+
+**Everything else is editable**, including `core/**`, `ui/**`, `app.py`, `assets/**`,
+`Containerfile`, `pyproject.toml`, `.streamlit/config.toml`, `.vscode/**` and `.claude/**`.
+§B9 froze the whole chassis behind the hook; in practice that inhibited the people maintaining
+these apps more than it protected the family, so enforcement moved to the test suite:
+`test_core_no_streamlit.py`, `test_navigation.py`, `test_show_the_code.py`,
+`test_concurrency.py` and `test_adalab_config.py` are what actually hold the invariants.
+`ALLOW_DEPLOY_CONFIG_EDIT=1` lifts the remaining guard for template maintainers.
 
 ## Copier questions
 
@@ -117,7 +126,9 @@ podman run -p 8000:8000 -v ./lab-data:/asv-mnt/lab-data -e COURSE_PASSWORD=x -e 
   `assets/*` instead.
 - **Domain question names** (`project_name`/`exercise_title`/…) rather than `prospect_name`;
   `app_description` is present as REPO_SPEC requires.
-- **Guardrail hook is `chassis_guard.py`** (not `protect_paths.py`); **no subagents** yet;
+- **Guardrail hook is `deploy_guard.py`** (not `protect_paths.py`), and its scope is narrower
+  than REPO_SPEC assumes — deployment state and student data only, not the app's own code;
+  **no subagents** yet;
   rules are in `.claude/rules/` and path-scoped via frontmatter. Stamp-time logic uses copier
   `_tasks` rather than `hooks/post_gen.py`.
 - **Stack is Streamlit, not FastAPI + React** — Addendum B, so CPDSE scientists can own the
